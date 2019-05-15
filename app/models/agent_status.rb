@@ -1,0 +1,2 @@
+class AgentStatus < ApplicationRecord
+end
