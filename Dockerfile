@@ -7,10 +7,11 @@ RUN apk update \
 WORKDIR /usr/src/app
 ENV RAILS_ENV=development
 ENV NODE_ENV=development
-COPY Gemfile* ./
+#COPY Gemfile* ./
+COPY . .
 RUN gem install bundler -v 1.17.3
 RUN bundle install && bundle package --cache-path=/usr/src/app/vendor/cache
-COPY . .
+
 # RUN bin/rails assets:precompile
 EXPOSE 3000
 # CMD ["rails", "server", "-b", "0.0.0.0"]
