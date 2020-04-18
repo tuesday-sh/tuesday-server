@@ -5,6 +5,10 @@ rvm:
 services: 
   - docker
 
+cache:
+  directories:
+    - vendor/cache
+  
 env:
   - DOCKER_COMPOSE_VERSION=1.25.4
 
