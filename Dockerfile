@@ -1,4 +1,4 @@
-FROM ruby:2.6.2-alpine
+FROM ruby:2.6.6-alpine
 RUN apk update \
   && apk upgrade \
   && apk add --update --no-cache \
@@ -8,7 +8,8 @@ WORKDIR /usr/src/app
 ENV RAILS_ENV=development
 ENV NODE_ENV=development
 COPY Gemfile* ./
-RUN bundle install
+RUN gem install bundler -v 1.17.3
+RUN bundle install && bundle package --cache-path=/usr/src/app/vendor/cache
 COPY . .
 # RUN bin/rails assets:precompile
 EXPOSE 3000
