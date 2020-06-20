@@ -43,7 +43,7 @@ name: Deploy to Amazon ECS
 jobs:
   deploy:
     name: Deploy
-    runs-on: ruby:2.6.6-alpine
+    runs-on: ubuntu-latest
 
     steps:
     - name: Checkout
