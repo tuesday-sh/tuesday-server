@@ -1,10 +1,10 @@
 {
     "taskDefinition": {
-        "taskDefinitionArn": "arn:aws:ecs:us-west-2:924799015424:task-definition/tuesday-server-dev",
+        "taskDefinitionArn": "arn:aws:ecs:us-west-2:924799015424:task-definition/tuesday-server-dev:1",
         "containerDefinitions": [
             {
                 "name": "web",
-                "image": "924799015424.dkr.ecr.us-west-2.amazonaws.com/tuesday-server-dev",
+                "image": "924799015424.dkr.ecr.us-west-2.amazonaws.com/tuesday-server-dev:latest",
                 "cpu": 0,
                 "portMappings": [
                     {
@@ -65,6 +65,6 @@
             "FARGATE"
         ],
         "cpu": "256",
-        "memory": "512"
+        "memory": "1024"
     }
 }
