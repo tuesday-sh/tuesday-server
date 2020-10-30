@@ -8,6 +8,7 @@ gem 'rake', '~> 12.3'
 gem 'puma', '~> 3.11'
 gem 'pg', '~> 1.1'
 gem 'webpacker', '~> 5.x'
+gem "actionview", ">= 5.2.4.4"
 # Build JSON APIs with ease. Read more: https://github.com/rails/jbuilder
 # gem 'jbuilder', '~> 2.5'
 # Use Redis adapter to run Action Cable in production
