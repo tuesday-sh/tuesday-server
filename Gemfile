@@ -5,7 +5,7 @@ ruby '2.6.6'
 
 gem 'rails', '~> 5.2.4'
 gem 'rake', '~> 12.3'
-gem 'puma', '~> 3.11'
+gem 'puma', '~> 4.3'
 gem 'pg', '~> 1.1'
 gem 'webpacker', '~> 5.x'
 gem "actionview", ">= 5.2.4.4"
