@@ -9,7 +9,7 @@ ENV RAILS_ENV=development
 ENV NODE_ENV=development
 COPY Gemfile* ./
 COPY vendor ./vendor
-RUN gem install bundler -v 1.17.3
+RUN gem install bundler -v 2.3.9
 RUN bundle install && bundle package --no-install --cache-path=/usr/src/app/vendor/cache
 COPY . .
 # RUN bin/rails assets:precompile
