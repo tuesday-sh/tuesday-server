@@ -172,9 +172,6 @@ GEM
     rspec-support (3.11.0)
     semantic_range (3.0.0)
     spring (2.1.1)
-    spring-watcher-listen (2.0.1)
-      listen (>= 2.7, < 4.0)
-      spring (>= 1.2, < 3.0)
     strscan (3.0.1)
     thor (1.2.1)
     timeout (0.2.0)
@@ -204,7 +201,6 @@ DEPENDENCIES
   rake (~> 13.0)
   rspec-rails (~> 5.1)
   spring (~> 2.1)
-  spring-watcher-listen (~> 2.0)
   webpacker (~> 5.4)
 
 RUBY VERSION
