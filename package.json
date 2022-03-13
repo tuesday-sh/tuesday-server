@@ -1,10 +1,11 @@
 {
   "dependencies": {
-    "@rails/webpacker": "5.1.1",
-    "alpinejs": "^2.4.1",
-    "bootstrap": "^4.5.0"
+    "@rails/webpacker": "5.4.3",
+    "alpinejs": "^3.9",
+    "bootstrap": "^5.1"
   },
   "devDependencies": {
-    "webpack-dev-server": "^3.11.0"
-  }
+    "webpack-dev-server": "^4.7"
+  },
+  "packageManager": "yarn@3.2.0"
 }
