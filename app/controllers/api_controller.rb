@@ -9,7 +9,7 @@ class ApiController < ApplicationController
       message: params[:msg])
     agent_status.save
     respond_to do |format|
-      format.json { render json: "{'got it'}" }
+      format.json { render json: "{'got it','server-version':'#{ TuesdayServer::Application::VERSION }'}" }
     end
   end
 end
