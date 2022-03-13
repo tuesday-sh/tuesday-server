@@ -1,4 +1,4 @@
-FROM ruby:2.6.6-alpine
+FROM ruby:2.7.5-alpine
 RUN apk update \
   && apk upgrade \
   && apk add --update --no-cache \
@@ -9,7 +9,7 @@ ENV RAILS_ENV=development
 ENV NODE_ENV=development
 COPY Gemfile* ./
 COPY vendor ./vendor
-RUN gem install bundler -v 2.3.9
+RUN gem install bundler -v 2.1.4
 RUN bundle install && bundle package --no-install --cache-path=/usr/src/app/vendor/cache
 COPY . .
 # RUN bin/rails assets:precompile
