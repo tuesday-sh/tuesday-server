@@ -8,7 +8,10 @@ default: &default
 
 development:
   <<: *default
-  database: tuesday_development
+  # host: <%= ENV['DB_HOST'] %>
+  # username: tuesday_development
+  # password: <%= ENV['DEV_DB_PASSWORD'] %>
+  # database: tuesday_development
 
 test:
   <<: *default
