@@ -159,6 +159,7 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
+  actionview (>= 5.2.4.4)
   bootsnap (>= 1.1.0)
   byebug
   listen (>= 3.0.5, < 3.2)
