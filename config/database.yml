@@ -9,6 +9,7 @@ default: &default
 
 development:
   <<: *default
+  database: tuesday_dev
   # host: <%= ENV['DB_HOST'] %>
   # username: tuesday_development
   # password: <%= ENV['DEV_DB_PASSWORD'] %>
