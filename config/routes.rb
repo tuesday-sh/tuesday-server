@@ -1,4 +1,5 @@
 Rails.application.routes.draw do
+  root 'home#index'
   get 'api/message'
   get '/ping/:token', to: 'api#message'
   post '/ping/:token', to: 'api#message'
