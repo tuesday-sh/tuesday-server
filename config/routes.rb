@@ -1,4 +1,5 @@
 Rails.application.routes.draw do
+  devise_for :users
   root 'home#index'
   get 'api/message'
   get '/ping/:token', to: 'api#message'
