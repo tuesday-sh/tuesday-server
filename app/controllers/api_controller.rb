@@ -16,7 +16,9 @@ class ApiController < ApplicationController
       f << "\n"
     end
 
-    render json: "{'got it'}"
+    respond_to do |format|
+      format.json { render json: "{'got it','server-version':'#{ TuesdayServer::Application::VERSION }'}" }
+    end
     # render error: {error: 'Token missing'}
   end
 end
