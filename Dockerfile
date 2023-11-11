@@ -9,7 +9,7 @@ ENV RAILS_ENV=development
 ENV NODE_ENV=development
 COPY Gemfile* ./
 COPY vendor ./vendor
-RUN gem install bundler -v 2.3.14
+RUN gem install bundler -v 2.4.22
 RUN bundle install && bundle package --no-install --cache-path=/usr/src/app/vendor/cache
 RUN yarn install
 COPY . .
