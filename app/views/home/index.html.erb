@@ -1,6 +1,18 @@
 <h1>tuesday.sh</h1>
 <% if user_signed_in? %>
   <p>Signed in as <%= current_user.email %></p>
+  <p>API Keys (<%= current_user.api_keys.length %>):</p>
+  <ol>
+    <% current_user.api_keys.each do |api_key| %>
+      <li><%= api_key[:token] %></li>
+    <% end %>
+  </ol>
+  <!--
+    TODO: a link button to get a new API key
+    is this a hotwire?
+    points to ApiKey api
+    refreshes this view 
+  -->
   <p><%= button_to("Sign Out", destroy_user_session_path, method: :delete) %></p>
   <% else %>
   <p><%= link_to("Sign In", new_user_session_path) %></p>
