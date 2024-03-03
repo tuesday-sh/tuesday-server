@@ -10,19 +10,34 @@
     <%= javascript_importmap_tags %>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
     <!-- TODO: favicon is linked from app/assets not public/ -->
     <%= favicon_link_tag asset_path('favicon.png') %>
 
   </head>
 
-  <body>
+  <body class="bg-light">
+    <nav class="navbar navbar-dark box-shadow" style="background-color: #483E66">
+      <div class="container d-flex justify-content-between">
+        <a href="/" class="navbar-brand d-flex align-items-center">
+          <img class="mr-2" style="width: 28px; height: 28px" src="<%= asset_path('tuesdaysh-favicon-white.png') %>"/> 
+          <strong>tuesday.sh</strong></a>
+        <a href="/account" class="text-white">Account</a>
+      </div>
+    </nav>
     <% if notice %>
-      <p class="alert alert-success"><%= notice %></p>
+      <p class="alert alert-success" style="color: #4A19E6"><%= notice %></p>
     <% end %>
     <% if alert %>
-      <p class="alert alert-danger"><%= alert %></p>
+      <p class="alert alert-danger" style="color: #4A19E6"><%= alert %></p>
     <% end %>
-    <%= yield %>
+    <main role="main" class="container">
+      <%= yield %>
+    </main>
+    <footer class="footer fixed-bottom">
+      <div class="container">
+        <span class="text-muted">© 2024 tuesday.sh</span>
+      </div>
+    </footer>
   </body>
 </html>

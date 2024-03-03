@@ -1,8 +1,7 @@
-<h1>tuesday.sh</h1>
 <% if user_signed_in? %>
-  <p>Signed in as <%= current_user.email %></p>
+  <p style="color: #E67919">Signed in as <%= current_user.email %></p>
   <p>API Keys (<%= current_user.api_keys.length %>):</p>
-  <ol>
+  <ol class="mono">
     <% current_user.api_keys.each do |api_key| %>
       <li><%= api_key[:token] %></li>
     <% end %>
@@ -16,4 +15,4 @@
   <p><%= button_to("Sign Out", destroy_user_session_path, method: :delete) %></p>
   <% else %>
   <p><%= link_to("Sign In", new_user_session_path) %></p>
-<% end %>
+  <% end %>
