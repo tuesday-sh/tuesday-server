@@ -21,4 +21,12 @@ class ApiController < ApplicationController
     end
     # render error: {error: 'Token missing'}
   end
+
+  def token
+    puts "get new token"
+
+    respond_to do |format|
+      format.json { render json: "{'new token for user','server-version':'#{ TuesdayServer::Application::VERSION }'}" }
+    end
+  end
 end
