@@ -10,7 +10,7 @@ gem "rails", "~> 7.2"
 gem "sprockets-rails"
 
 # Use sqlite3 as the database for Active Record
-# gem "sqlite3", "~> 1.4"
+gem "sqlite3", "~> 2.1"
 
 gem 'pg', '~> 1.5'
 
@@ -50,6 +50,8 @@ gem "sassc-rails"
 gem 'bootstrap', '~> 5.3'
 
 gem 'devise', '~> 4.9'
+
+gem 'dotenv', '~> 3.1'
 
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 # gem "image_processing", "~> 1.2"

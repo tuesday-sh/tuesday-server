@@ -7,6 +7,8 @@ services:
       - ./tmp/db:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    profiles:
+      - production
   web:
     build: .
     command: "puma"
@@ -16,3 +18,12 @@ services:
       - "3000:3000"
     depends_on:
       - db 
+    profiles:
+      - production
+  dev:
+    build: .
+    command: "puma"
+    volumes:
+      - .:/usr/src/app
+    ports:
+      - "3000:3000"
