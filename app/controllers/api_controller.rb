@@ -36,6 +36,20 @@ class ApiController < ApplicationController
   #    insert package current version and available version into influxdb
   #    if a package was previously logged as needing update but it's not in the latest status update, then it was updated?
 
+  ###
+  # class MessageImporter
+  #   can be run from rake?
+  #   operates on a directory with all the message logs
+  #   each file should have one or more messages in it that will be processed
+  #   when processing a file is done, update the journal
+  #   message file should roll over when it gets too big
+  #   for each message to be processed, save it to InfluxDB
+  #   on the last message, save it to app db as the last state
+
+  ###
+  # class ImporterJournal
+  #   file based record of the current folder's import status
+  #   each filename has a date of read start, read end, and the last line number processed
   def token
     puts "get new token"
 
