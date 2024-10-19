@@ -1,4 +1,4 @@
 # tuesday-server
 Hosted package update monitor
 
-[![Build Status](https://travis-ci.com/tuesday-sh/tuesday-server.svg?branch=master)](https://travis-ci.com/tuesday-sh/tuesday-server)
+![Build Status](https://github.com/tuesday-sh/tuesday-server/actions/workflows/docker-image.yml/badge.svg)
