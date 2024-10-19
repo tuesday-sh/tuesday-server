@@ -4,7 +4,7 @@ RUN apk update \
   && apk add --update --no-cache \
   build-base curl-dev git postgresql-dev \
   yaml-dev zlib-dev tzdata gcompat nodejs
-RUN apk add ruby-dev
+RUN apk add ruby-dev=3.3.3-r1
 WORKDIR /usr/src/app
 ENV RAILS_ENV=development
 ENV NODE_ENV=development
