@@ -1,4 +1,4 @@
-FROM arm64v8/alpine
+FROM alpine:3.20
 RUN apk update \
   && apk upgrade \
   && apk add --update --no-cache \
