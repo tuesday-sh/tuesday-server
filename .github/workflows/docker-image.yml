@@ -2,7 +2,7 @@ name: Docker Image CI
 env:
   REGISTRY: ghcr.io
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
-  IMAGE_NAME: tuesday-sh-server:develop
+  IMAGE_NAME: tuesday-sh-server
 on:
   push:
     branches: [ "develop" ]
