@@ -1,6 +1,10 @@
 class ApiController < ApplicationController
   protect_from_forgery with: :null_session
 
+  def up
+    render json: "{is_up: true}"
+  end
+
   def message
     puts params[:token]
     # todo: parse the post params into an AgentStatus then write it to a file
