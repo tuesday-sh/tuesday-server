@@ -1,13 +1,17 @@
 Rails.application.routes.draw do
   devise_for :users
-  root 'home#index'
-  get 'api/up'
-  get 'api/message'
-  post 'api/token'
-  get '/ping/:token', to: 'api#message'
-  post '/ping/:token', to: 'api#message'
-  # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
+  root "home#index"
+  get "up", to: "api#up"
+  get "api/up"
+  get "api/message"
+  post "api/token"
+  get "/ping/:token", to: "api#message"
+  post "/ping/:token", to: "api#message"
 
-  # Defines the root path route ("/")
-  # root "articles#index"
+  namespace :api do
+    namespace :v1 do
+      resources :bulletins, only: [:index]
+      resources :inventory, only: [:index]
+    end
+  end
 end
