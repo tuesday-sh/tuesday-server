@@ -12,6 +12,8 @@ Rails.application.routes.draw do
     namespace :v1 do
       resources :bulletins, only: [:index]
       resources :inventory, only: [:index]
+      post "discovery/analyze", to: "discovery#analyze"
+      post "discovery/confirm", to: "discovery#confirm"
     end
   end
 end
