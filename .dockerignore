@@ -1,0 +1,9 @@
+.git
+.github
+log/*
+!log/.keep
+tmp/*
+!tmp/.keep
+node_modules
+storage/*
+!storage/.keep
