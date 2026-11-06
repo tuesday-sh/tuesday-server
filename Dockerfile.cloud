@@ -18,18 +18,17 @@ RUN apk update && apk add --no-cache \
 
 WORKDIR /app
 ENV RAILS_ENV=production \
-    BUNDLE_DEPLOYMENT=1 \
     BUNDLE_PATH=/app/vendor/bundle \
     BUNDLE_WITHOUT="development:test"
 
 COPY Gemfile Gemfile.lock ./
 RUN gem install bundler -v 2.5.20 --no-document && \
-    bundle config set --local deployment 'true' && \
+    bundle config set --local path '/app/vendor/bundle' && \
     bundle config set --local without 'development test' && \
     bundle install --jobs 4 --retry 3
 
 COPY . .
-RUN SECRET_KEY_BASE_DUMMY=1 bundle exec rails assets:precompile
+RUN SECRET_KEY_BASE=dummy_key_for_build_1234567890abcdef bundle exec rails assets:precompile
 
 # Final Hardened Runtime Stage (Non-root 65532:65532)
 FROM cgr.dev/chainguard/wolfi-base:latest AS runtime
@@ -46,7 +45,6 @@ WORKDIR /app
 ENV RAILS_ENV=production \
     RAILS_LOG_TO_STDOUT=true \
     RAILS_SERVE_STATIC_FILES=true \
-    BUNDLE_DEPLOYMENT=1 \
     BUNDLE_PATH=/app/vendor/bundle \
     BUNDLE_WITHOUT="development:test" \
     PORT=8080
