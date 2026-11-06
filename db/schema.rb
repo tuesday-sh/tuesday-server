@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_11_06_190000) do
+ActiveRecord::Schema[7.2].define(version: 2026_11_06_200000) do
   create_table "api_keys", force: :cascade do |t|
     t.integer "bearer_id", null: false
     t.string "bearer_type", null: false
@@ -19,6 +19,57 @@ ActiveRecord::Schema[7.2].define(version: 2026_11_06_190000) do
     t.datetime "updated_at", null: false
     t.index ["bearer_id", "bearer_type"], name: "index_api_keys_on_bearer_id_and_bearer_type"
     t.index ["token"], name: "index_api_keys_on_token", unique: true
+  end
+
+  create_table "canonical_feeds", force: :cascade do |t|
+    t.string "external_uuid", null: false
+    t.string "slug", null: false
+    t.string "pro_name", null: false
+    t.string "stn_name", null: false
+    t.string "feed_category", default: "advisory", null: false
+    t.text "purl_prefixes", default: "[]", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["external_uuid"], name: "index_canonical_feeds_on_external_uuid", unique: true
+    t.index ["slug"], name: "index_canonical_feeds_on_slug", unique: true
+  end
+
+  create_table "catalog_releases", force: :cascade do |t|
+    t.string "purl_base", null: false
+    t.string "canonical_feed_slug", null: false
+    t.string "version", null: false
+    t.string "release_channel", default: "stable", null: false
+    t.string "bump_classification", default: "patch", null: false
+    t.string "released_at", null: false
+    t.string "eol_date"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["canonical_feed_slug"], name: "index_catalog_releases_on_canonical_feed_slug"
+    t.index ["purl_base", "version"], name: "index_catalog_releases_on_purl_base_and_version", unique: true
+  end
+
+  create_table "curated_bulletins", force: :cascade do |t|
+    t.string "external_id", null: false
+    t.string "canonical_feed_slug", null: false
+    t.string "bulletin_type", null: false
+    t.boolean "is_high_sev", default: false, null: false
+    t.string "purl_base", null: false
+    t.string "affected_version_range"
+    t.string "fixed_version"
+    t.string "pro_title", null: false
+    t.text "pro_body", null: false
+    t.string "stn_title", null: false
+    t.text "stn_body", null: false
+    t.text "ai_pro_bullet", null: false
+    t.text "ai_stn_bullet", null: false
+    t.text "remediation_steps", default: "[]", null: false
+    t.string "published_at", null: false
+    t.string "content_hash"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["canonical_feed_slug"], name: "index_curated_bulletins_on_canonical_feed_slug"
+    t.index ["external_id"], name: "index_curated_bulletins_on_external_id", unique: true
+    t.index ["purl_base"], name: "index_curated_bulletins_on_purl_base"
   end
 
   create_table "monitored_devices", force: :cascade do |t|

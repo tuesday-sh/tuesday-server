@@ -11,7 +11,17 @@ module Bulletins
   # 1. The Bulletins payload (AI Summary + Matched Feeds + High-Sev Override Inbox + Best-Guess Rules)
   # 2. The 128-LED Status Matrix (ordered Z0 -> Z4) + Action-First Inventory List (defaulting to non-Green devices)
   class GoldSnapshotLoader
-    DEFAULT_LAKE_DIR = File.expand_path("../../../../../tuesday-datalake/gold", __FILE__)
+    SIBLING_LAKE_DIR = File.expand_path("../../../../../tuesday-datalake/gold", __FILE__)
+    BUNDLED_LAKE_DIR = File.expand_path("../../../../db/datalake/gold", __FILE__)
+    DEFAULT_LAKE_DIR = File.exist?(File.join(SIBLING_LAKE_DIR, "canonical_feeds.json")) ? SIBLING_LAKE_DIR : BUNDLED_LAKE_DIR
+
+    def self.resolve_lake_dir(override_dir = nil)
+      candidate = override_dir.presence || ENV["GOLD_LAKE_DIR"].presence
+      return candidate if candidate && File.exist?(File.join(candidate, "canonical_feeds.json"))
+      return SIBLING_LAKE_DIR if File.exist?(File.join(SIBLING_LAKE_DIR, "canonical_feeds.json"))
+
+      BUNDLED_LAKE_DIR
+    end
 
     TRUST_ZONE_ORDER = {
       "z0_core" => 0,
@@ -29,8 +39,21 @@ module Bulletins
       "ok" => 5
     }.freeze
 
-    def self.load_gold_feeds(lake_dir: ENV.fetch("GOLD_LAKE_DIR", DEFAULT_LAKE_DIR))
-      raw = JSON.parse(File.read(File.join(lake_dir, "canonical_feeds.json")))
+    def self.load_gold_feeds(lake_dir: nil)
+      if defined?(::CanonicalFeed) && ::CanonicalFeed.table_exists? && ::CanonicalFeed.exists?
+        return ::CanonicalFeed.order(:id).map do |rec|
+          InboxAssembler::CanonicalFeedStruct.new(
+            id: rec.external_uuid,
+            slug: rec.slug,
+            pro_name: rec.pro_name,
+            stn_name: rec.stn_name,
+            purl_prefixes: rec.purl_prefixes_list
+          )
+        end
+      end
+
+      resolved = resolve_lake_dir(lake_dir)
+      raw = JSON.parse(File.read(File.join(resolved, "canonical_feeds.json")))
       raw.map do |row|
         InboxAssembler::CanonicalFeedStruct.new(
           id: row["id"],
@@ -42,9 +65,30 @@ module Bulletins
       end
     end
 
-    def self.load_gold_bulletins(lake_dir: ENV.fetch("GOLD_LAKE_DIR", DEFAULT_LAKE_DIR), feeds_by_slug: nil)
+    def self.load_gold_bulletins(lake_dir: nil, feeds_by_slug: nil)
       feeds_by_slug ||= load_gold_feeds(lake_dir: lake_dir).each_with_object({}) { |f, h| h[f.slug] = f }
-      raw = JSON.parse(File.read(File.join(lake_dir, "curated_bulletins.json")))
+      if defined?(::CuratedBulletin) && ::CuratedBulletin.table_exists? && ::CuratedBulletin.exists?
+        return ::CuratedBulletin.order(:id).map do |rec|
+          feed = feeds_by_slug[rec.canonical_feed_slug]
+          InboxAssembler::CuratedBulletinStruct.new(
+            external_id: rec.external_id,
+            canonical_feed_id: feed&.id || rec.canonical_feed_slug,
+            bulletin_type: rec.bulletin_type,
+            is_high_sev: rec.is_high_sev,
+            purl_base: rec.purl_base,
+            pro_title: rec.pro_title,
+            pro_body: rec.pro_body,
+            stn_title: rec.stn_title,
+            stn_body: rec.stn_body,
+            ai_pro_bullet: rec.ai_pro_bullet,
+            ai_stn_bullet: rec.ai_stn_bullet,
+            published_at: rec.published_at
+          )
+        end
+      end
+
+      resolved = resolve_lake_dir(lake_dir)
+      raw = JSON.parse(File.read(File.join(resolved, "curated_bulletins.json")))
       raw.map do |row|
         feed = feeds_by_slug[row["canonical_feed_slug"]]
         InboxAssembler::CuratedBulletinStruct.new(

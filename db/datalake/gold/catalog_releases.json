@@ -1,0 +1,65 @@
+[
+  {
+    "purl_base": "pkg:generic/ui/unifi-os",
+    "canonical_feed_slug": "ubiquiti-advisories",
+    "version": "4.0.20",
+    "release_channel": "stable",
+    "bump_classification": "patch",
+    "released_at": "2026-10-15T12:00:00Z",
+    "eol_date": "2030-06-01T00:00:00Z"
+  },
+  {
+    "purl_base": "pkg:generic/netgear/r7000",
+    "canonical_feed_slug": "vendor-eol-ledger",
+    "version": "1.0.11.136",
+    "release_channel": "stable",
+    "bump_classification": "patch",
+    "released_at": "2024-03-10T00:00:00Z",
+    "eol_date": "2025-12-31T00:00:00Z"
+  },
+  {
+    "purl_base": "pkg:generic/ui/u7-pro",
+    "canonical_feed_slug": "ubiquiti-advisories",
+    "version": "7.0.66",
+    "release_channel": "stable",
+    "bump_classification": "minor",
+    "released_at": "2026-10-01T00:00:00Z",
+    "eol_date": "2031-06-01T00:00:00Z"
+  },
+  {
+    "purl_base": "pkg:generic/apple/macos",
+    "canonical_feed_slug": "apple-proxmox-upstream",
+    "version": "15.3.2",
+    "release_channel": "stable",
+    "bump_classification": "patch",
+    "released_at": "2026-10-31T14:00:00Z",
+    "eol_date": "2029-10-01T00:00:00Z"
+  },
+  {
+    "purl_base": "pkg:deb/debian/proxmox-ve",
+    "canonical_feed_slug": "apple-proxmox-upstream",
+    "version": "8.3.2",
+    "release_channel": "stable",
+    "bump_classification": "patch",
+    "released_at": "2026-10-31T10:00:00Z",
+    "eol_date": "2028-07-01T00:00:00Z"
+  },
+  {
+    "purl_base": "pkg:generic/lg/webos",
+    "canonical_feed_slug": "lg-esphome-iot",
+    "version": "8.3.0",
+    "release_channel": "stable",
+    "bump_classification": "minor",
+    "released_at": "2026-10-20T00:00:00Z",
+    "eol_date": "2027-03-01T00:00:00Z"
+  },
+  {
+    "purl_base": "pkg:generic/esphome/firmware",
+    "canonical_feed_slug": "lg-esphome-iot",
+    "version": "2026.10.2",
+    "release_channel": "stable",
+    "bump_classification": "minor",
+    "released_at": "2026-10-30T12:00:00Z",
+    "eol_date": "2029-01-01T00:00:00Z"
+  }
+]

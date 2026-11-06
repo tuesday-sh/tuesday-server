@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-11-06T21:01:45Z",
+  "enricher_provider": "elastix",
+  "enricher_model": "gpt-oss-120b",
+  "enriched_items_count": 8,
+  "cached_items_count": 0,
+  "total_bulletins_count": 8,
+  "artifacts": {
+    "canonical_feeds.json": "sha256:32fd5b1dc54f0759df6fc77eadf5d539602c13d80a912169f02950c762280f09",
+    "curated_bulletins.json": "sha256:4d6fbc55861a5dd0e57207d5025075f305ffcaff2b0bc7f3484d5dee19d42a18",
+    "catalog_releases.json": "sha256:60d2c6be10a66a377cef497173fd17127169a6f94a9eee1bea94a2c38dd704e2"
+  },
+  "manifest_digest": "sha256:3cc602e29bff908c77bd9b651a0531582e0298c2e664c6f6d9267df50f5442bc"
+}

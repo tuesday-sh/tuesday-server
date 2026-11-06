@@ -1,0 +1,95 @@
+[
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000001",
+    "slug": "cpsc-safety",
+    "pro_name": "CPSC Consumer Safety Recalls",
+    "stn_name": "CPSC Home & Nursery Safety Recalls",
+    "feed_category": "recall",
+    "purl_prefixes": [
+      "pkg:generic/owlet/"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000002",
+    "slug": "ubiquiti-advisories",
+    "pro_name": "Ubiquiti UniFi Security & Firmware",
+    "stn_name": "UniFi Wi-Fi & Router Updates",
+    "feed_category": "advisory",
+    "purl_prefixes": [
+      "pkg:generic/ui/"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000003",
+    "slug": "apple-proxmox-upstream",
+    "pro_name": "Apple macOS & Proxmox VE Releases",
+    "stn_name": "MacBook & Home Server Software",
+    "feed_category": "release",
+    "purl_prefixes": [
+      "pkg:generic/apple/macos",
+      "pkg:deb/debian/proxmox-ve"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000004",
+    "slug": "vendor-eol-ledger",
+    "pro_name": "Vendor EOL & Support Cutoff Ledger",
+    "stn_name": "Manufacturer Lifespan & Retirement Notices",
+    "feed_category": "eol",
+    "purl_prefixes": [
+      "pkg:generic/netgear/"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000005",
+    "slug": "unraid-nintendo-ok",
+    "pro_name": "Unraid OS & Switch 2 Release Channel",
+    "stn_name": "Unraid Storage & Nintendo Switch Updates",
+    "feed_category": "release",
+    "purl_prefixes": [
+      "pkg:generic/limetech/unraid",
+      "pkg:generic/nintendo/horizon-os"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000006",
+    "slug": "lg-esphome-iot",
+    "pro_name": "LG webOS TV & ESPHome IoT Feed",
+    "stn_name": "LG Smart TV & Garage Smart Relay Feed",
+    "feed_category": "advisory",
+    "purl_prefixes": [
+      "pkg:generic/lg/webos",
+      "pkg:generic/esphome/"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000007",
+    "slug": "ecobee-umbrella",
+    "pro_name": "Ecobee Thermostat Family (OUI Umbrella)",
+    "stn_name": "Ecobee Thermostat Safety & Updates",
+    "feed_category": "advisory",
+    "purl_prefixes": [
+      "pkg:generic/ecobee/"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000099",
+    "slug": "cisco-ios-xe-enterprise",
+    "pro_name": "Cisco Catalyst IOS-XE Enterprise Advisories",
+    "stn_name": "Cisco Enterprise Routers",
+    "feed_category": "advisory",
+    "purl_prefixes": [
+      "pkg:generic/cisco/ios-xe"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000100",
+    "slug": "synology-dsm-advisories",
+    "pro_name": "Synology DSM Security Advisories",
+    "stn_name": "Synology Home NAS Updates",
+    "feed_category": "advisory",
+    "purl_prefixes": [
+      "pkg:generic/synology/dsm"
+    ]
+  }
+]

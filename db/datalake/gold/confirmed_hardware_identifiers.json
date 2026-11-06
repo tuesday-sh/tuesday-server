@@ -1,0 +1,18 @@
+[
+  {
+    "identifier": "UPC-810010079999-TEST",
+    "vendor": "Ubiquiti",
+    "model": "USW-Enterprise-8-PoE",
+    "lifecycle_tier": "active",
+    "trust_zone": "z0_core",
+    "updated_at": "2026-11-06T19:19:52Z"
+  },
+  {
+    "identifier": "MAC: 24:5A:4C:88:99:AA",
+    "vendor": "Ubiquiti",
+    "model": "UCG-Ultra",
+    "lifecycle_tier": "active",
+    "trust_zone": "z1_trusted",
+    "updated_at": "2026-11-03T04:00:58Z"
+  }
+]
