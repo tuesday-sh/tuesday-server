@@ -25,6 +25,7 @@ module Telemetry
 
     # Per-1M token pricing in USD
     MODEL_PRICING_PER_1M = {
+      "gpt-oss-120b" => { input: 0.10, cached_input: 0.025, output: 0.30 },
       "qwen3.8-27b" => { input: 0.30, cached_input: 0.05, output: 1.20 },
       "gemini-3.8-flash" => { input: 0.15, cached_input: 0.0375, output: 0.60 },
       "gemini-2.5-flash" => { input: 0.15, cached_input: 0.0375, output: 0.60 },
