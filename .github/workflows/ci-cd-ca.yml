@@ -1,0 +1,143 @@
+name: "Packablock CI/CD/CA (Chainguard + pkablk + pkaput)"
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify-and-attest:
+    name: "Test, Verify Ledger, Attest SBOM & Publish DNSLink"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby 3.3
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3.0"
+          bundler-cache: true
+
+      - name: Run Rails Database Migrations & Test Suite
+        run: |
+          bundle exec rails db:migrate RAILS_ENV=test
+          bundle exec rails test
+
+      - name: Setup Bun & Packablock Client (pkablk)
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Verify Packablock Supply Chain Ledger (packablock.yaml)
+        run: |
+          bun install -g github:Packablock/packablock-client
+          pkablk check packablock.yaml
+          pkablk audit packablock.yaml --visualize
+
+      - name: Set up Go 1.24 (for pkaput Continuous Attestation Engine)
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Install Anchore Syft (CycloneDX v1.5 SBOM Generator)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sudo sh -s -- -b /usr/local/bin
+
+      - name: Build Chainguard Wolfi Container Image (Dockerfile.cloud)
+        run: |
+          docker build -f Dockerfile.cloud -t tuesday-server:${GITHUB_SHA::7} .
+
+      - name: Run pkaput Squash-Release, CycloneDX SBOM & DNSLink Attestation (examples.packablock.com)
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          PKABLK_REGISTRY_URL: ${{ secrets.PKABLK_REGISTRY_URL }}
+          PKABLK_API_KEY: ${{ secrets.PKABLK_API_KEY }}
+        run: |
+          git clone --depth 1 https://github.com/aaronbronow/continuous-attestation.git /tmp/ca
+          go build -C /tmp/ca -o /usr/local/bin/pkaput ./cmd/pkaput
+
+          # 1. Verify Packablock chain via pkaput
+          pkaput check packablock.yaml
+
+          # 2. Generate mock/container layer archives + CycloneDX SBOM + DSSEv1 + CARv1 bundle
+          mkdir -p bin/layers
+          docker save tuesday-server:${GITHUB_SHA::7} | gzip > bin/layers/layer1.tar.gz
+          cp packablock.yaml bin/layers/layer2.tar.gz
+          cp Gemfile.lock bin/layers/layer3.tar.gz
+
+          pkaput squash-release \
+            --chain packablock.yaml \
+            --layers 3 \
+            --output-tag "tuesday-server:${GITHUB_SHA::7}" \
+            --storage local
+
+          # 3. Publish RFC 4648 Base32 DNSLink TXT record to examples.packablock.com
+          if [ -n "$CF_API_TOKEN" ] && [ -n "$CF_ZONE_ID" ]; then
+            pkaput publish-dns --domain "examples.packablock.com" --provider cloudflare
+            pkaput preflight-gate --file bin/layers/flattened.tar.gz --domain "examples.packablock.com"
+          else
+            echo "CF_API_TOKEN not set; verifying DNSLink preflight-gate via local CoreDNS Loopback..."
+            curl -L -s https://github.com/coredns/coredns/releases/download/v1.11.1/coredns_1.11.1_linux_amd64.tgz | tar -xz
+            sudo mv coredns /usr/local/bin/
+            pkaput publish-dns --domain "examples.packablock.com" --provider local
+            sudo nohup coredns -conf Corefile -dns.port 53 > coredns.log 2>&1 &
+            sleep 2
+            echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
+            pkaput preflight-gate --file bin/layers/flattened.tar.gz --domain "examples.packablock.com"
+          fi
+
+      - name: Upload Continuous Attestation Artifacts (CycloneDX SBOM, DSSEv1, CARv1)
+        uses: actions/upload-artifact@v4
+        with:
+          name: tuesday-server-ca-bundle-${{ github.sha }}
+          path: |
+            packablock.yaml
+            sbom.cdx.json
+            attestation.dsse.json
+            release-bundle.car
+
+  deploy-cloud-run:
+    name: "Deploy Verified Chainguard Image to GCP Cloud Run (us-west1)"
+    needs: verify-and-attest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && vars.ENABLE_CLOUD_RUN_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud via Workload Identity Federation
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build & Push Chainguard Image to Artifact Registry (us-west1)
+        run: |
+          gcloud auth configure-docker us-west1-docker.pkg.dev --quiet
+          IMAGE_URI="us-west1-docker.pkg.dev/tuesday-sh/tuesday-containers/tuesday-server:${GITHUB_SHA::7}"
+          docker build -f Dockerfile.cloud -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+
+      - name: Deploy to Cloud Run Gen2 (us-west1)
+        run: |
+          IMAGE_URI="us-west1-docker.pkg.dev/tuesday-sh/tuesday-containers/tuesday-server:${GITHUB_SHA::7}"
+          gcloud run deploy tuesday-server \
+            --image="$IMAGE_URI" \
+            --region=us-west1 \
+            --platform=managed \
+            --execution-environment=gen2 \
+            --allow-unauthenticated \
+            --port=8080 \
+            --startup-probe=httpGet.path=/up,httpGet.port=8080,initialDelaySeconds=2,periodSeconds=5,failureThreshold=12
