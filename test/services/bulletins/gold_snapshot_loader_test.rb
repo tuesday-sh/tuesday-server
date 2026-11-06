@@ -5,6 +5,9 @@ require_relative "../../../app/services/bulletins/gold_snapshot_loader"
 
 class GoldSnapshotLoaderTest < Minitest::Test
   def test_assemble_bulletins_from_gold_snapshot
+    lake_dir = ENV.fetch("GOLD_LAKE_DIR", Bulletins::GoldSnapshotLoader::DEFAULT_LAKE_DIR)
+    skip "Sibling tuesday-datalake/gold directory not present (#{lake_dir})" unless File.exist?(File.join(lake_dir, "canonical_feeds.json"))
+
     payload = Bulletins::GoldSnapshotLoader.assemble_bulletins_from_gold(
       app_flavor: "tuesday",
       muted_feed_slugs: ["lg-esphome-iot"]
