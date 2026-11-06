@@ -26,10 +26,19 @@ module Api
                             nil
                           end
 
+        helper_profile = if params[:helper_name].present?
+                           {
+                             name: params[:helper_name].to_s,
+                             relationship: params[:helper_relationship].to_s,
+                             linked_pro_account: ActiveModel::Type::Boolean.new.cast(params[:linked_pro_account]) || false
+                           }
+                         end
+
         payload = Bulletins::GoldSnapshotLoader.assemble_bulletins_from_gold(
           app_flavor: app_flavor,
           muted_feed_slugs: muted_slugs,
-          tracked_devices: tracked_devices
+          tracked_devices: tracked_devices,
+          helper_profile: helper_profile
         )
 
         render json: payload

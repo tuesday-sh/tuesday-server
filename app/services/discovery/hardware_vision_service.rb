@@ -252,20 +252,38 @@ module Discovery
                            "Tuesday Server → #{provider_used} (#{model_used} • #{(latency_ms / 1000.0).round(2)}s)"
                          end
 
+        next_prompt = result["nextPromptForUser"] || result["nextNarrowingQuestion"] || "Can you check for a Barcode, Serial Number, Model, or MAC Address on the label?"
+        image_quality_score = (result["imageQualityScore"] || (top_confidence >= 0.50 ? 0.85 : 0.40)).to_f.round(2)
+        discovery_status = if top_confidence >= 0.85
+                             "matched_exact"
+                           elsif image_quality_score < 0.45
+                             "coach_retake"
+                           else
+                             "coach_next_angle"
+                           end
+
+        coaching_directive = {
+          "status" => discovery_status,
+          "imageQualityScore" => image_quality_score,
+          "nextPhotoPrompt" => discovery_status == "matched_exact" ? nil : next_prompt
+        }
+
         {
           # Mobile rich turn fields (Android & iOS)
           "visualSummary" => result["visualSummary"] || result["reasoning"] || "Analyzed device hardware and clues.",
-          "nextNarrowingQuestion" => result["nextNarrowingQuestion"] || result["nextPromptForUser"] || "Can you check for a Barcode, Serial Number, Model, or MAC Address on the label?",
+          "nextNarrowingQuestion" => next_prompt,
           "recommendedClueTypes" => result["recommendedClueTypes"] || DEFAULT_CLUE_TYPES,
           "extractedIdentifiersObject" => result["extractedIdentifiersObject"] || normalized_clues[:object],
           "extractedIdentifiers" => normalized_clues[:flat_list],
           "candidates" => Array(result["candidates"]),
-          # Top-level summary & telemetry fields
+          # Top-level summary, coaching & telemetry fields
           "vendor" => top_vendor,
           "model" => top_model,
           "confidence" => top_confidence.round(2),
+          "discoveryStatus" => discovery_status,
+          "coachingDirective" => coaching_directive,
           "reasoning" => result["reasoning"] || top_candidate["reasoning"] || result["visualSummary"],
-          "nextPromptForUser" => result["nextPromptForUser"] || result["nextNarrowingQuestion"],
+          "nextPromptForUser" => next_prompt,
           "suggestedLifecycleTier" => result["suggestedLifecycleTier"] || "active",
           "suggestedTrustZone" => result["suggestedTrustZone"] || "z1_trusted",
           "providerUsed" => provider_used,

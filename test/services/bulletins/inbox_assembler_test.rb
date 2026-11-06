@@ -248,4 +248,69 @@ class BulletinsInboxAssemblerTest < Minitest::Test
     assert_equal true, guessed_item[:matched_by_guess]
     assert_equal ["Ecobee SmartThermostat Premium", "Ecobee3 Lite"], guessed_item[:candidate_models]
   end
+
+  def test_conditional_phone_a_friend_advisor_modes_and_cautious_provisional_guidance
+    guessed_thermostat = Bulletins::InboxAssembler::TrackedDeviceStruct.new(
+      id: "dev-12",
+      port_index: 12,
+      short_label: "Thermostat",
+      purls: ["pkg:generic/ecobee/*"],
+      confidence_tier: :provisional_guess,
+      candidate_models: ["Ecobee SmartThermostat Premium", "Ecobee3 Lite"]
+    )
+    ecobee_kev = Bulletins::InboxAssembler::CuratedBulletinStruct.new(
+      external_id: "CVE-2026-88901",
+      canonical_feed_id: "feed-3-ecobee-umbrella",
+      bulletin_type: "cve",
+      is_high_sev: true,
+      purl_base: "pkg:generic/ecobee/smart-thermostat",
+      pro_title: "CVE-2026-88901: Ecobee HomeKit Pairing PIN Bypass",
+      pro_body: "High-severity local pairing vulnerability.",
+      stn_title: "Security Warning for Guessed Ecobee Thermostat",
+      stn_body: "Confirm your thermostat model to verify if this security fix applies.",
+      ai_pro_bullet: "Guessed Ecobee CVE.",
+      ai_stn_bullet: "Guessed Ecobee CVE.",
+      published_at: "2026-11-01T12:00:00Z"
+    )
+
+    # 1. Standalone User (default -> skips advisor step, provides cautious provisional guidance)
+    standalone_res = Bulletins::InboxAssembler.assemble(
+      canonical_feeds: @feeds,
+      tracked_devices: [guessed_thermostat],
+      muted_feed_ids: [],
+      curated_bulletins: [ecobee_kev],
+      app_flavor: "surethingnet"
+    )
+    assert_includes standalone_res[:ai_summary][:cautious_provisional_guidance], "Do not unplug or replace your device yet"
+    assert_equal "standalone", standalone_res[:ai_summary][:phone_a_friend_advisor][:mode]
+    assert_equal false, standalone_res[:ai_summary][:phone_a_friend_advisor][:advisor_invoked]
+
+    # 2. Unlinked Helper Profile ("my son Alex helps me with IT")
+    unlinked_res = Bulletins::InboxAssembler.assemble(
+      canonical_feeds: @feeds,
+      tracked_devices: [guessed_thermostat],
+      muted_feed_ids: [],
+      curated_bulletins: [ecobee_kev],
+      app_flavor: "surethingnet",
+      helper_profile: { name: "Alex", relationship: "son", linked_pro_account: false }
+    )
+    assert_equal "unlinked_helper", unlinked_res[:ai_summary][:phone_a_friend_advisor][:mode]
+    assert_equal true, unlinked_res[:ai_summary][:phone_a_friend_advisor][:advisor_invoked]
+    assert_includes unlinked_res[:ai_summary][:phone_a_friend_advisor][:summary], "your son Alex"
+    assert_includes unlinked_res[:ai_summary][:phone_a_friend_advisor][:shareable_message], "Hi Alex"
+
+    # 3. Linked Family Account (SureThingNet <-> Tuesday.sh Pro)
+    linked_res = Bulletins::InboxAssembler.assemble(
+      canonical_feeds: @feeds,
+      tracked_devices: [guessed_thermostat],
+      muted_feed_ids: [],
+      curated_bulletins: [ecobee_kev],
+      app_flavor: "surethingnet",
+      helper_profile: { name: "Alex", relationship: "son", linked_pro_account: true }
+    )
+    assert_equal "linked_family_account", linked_res[:ai_summary][:phone_a_friend_advisor][:mode]
+    assert_equal true, linked_res[:ai_summary][:phone_a_friend_advisor][:advisor_invoked]
+    assert_equal true, linked_res[:ai_summary][:phone_a_friend_advisor][:delegated_to_pro_dashboard]
+    assert_includes linked_res[:ai_summary][:phone_a_friend_advisor][:summary], "Tuesday.sh Pro dashboard"
+  end
 end

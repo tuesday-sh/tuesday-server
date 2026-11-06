@@ -73,7 +73,8 @@ module Bulletins
       tracked_devices:,
       muted_feed_ids:,
       curated_bulletins:,
-      app_flavor: "tuesday"
+      app_flavor: "tuesday",
+      helper_profile: nil
     )
       is_stn = (app_flavor.to_s == "surethingnet")
       muted_set = Array(muted_feed_ids).to_set
@@ -184,6 +185,18 @@ module Bulletins
       active_feed_count = confirmed_feeds.count { |f| !muted_set.include?(f.id) }
       muted_feed_count = matched_feeds.count { |f| muted_set.include?(f.id) }
 
+      provisional_devs = tracked_devices.select { |d| d.effective_tier == :provisional_guess }
+      cautious_guidance = build_cautious_provisional_guidance(
+        provisional_high_sev_count: provisional_high_sev_count,
+        provisional_devices: provisional_devs,
+        is_stn: is_stn
+      )
+      advisor_payload = build_phone_a_friend_advisor(
+        helper_profile: helper_profile,
+        provisional_high_sev_count: provisional_high_sev_count,
+        provisional_devices: provisional_devs
+      )
+
       {
         ai_summary: {
           active_feed_count: active_feed_count,
@@ -191,11 +204,64 @@ module Bulletins
           provisional_feed_count: provisional_only_feed_ids.size,
           muted_high_sev_override_count: muted_high_sev_count,
           provisional_high_sev_count: provisional_high_sev_count,
-          bullets: ai_bullets
+          bullets: ai_bullets,
+          cautious_provisional_guidance: cautious_guidance,
+          phone_a_friend_advisor: advisor_payload
         },
         matched_feeds: feed_summaries,
         inbox: inbox_items
       }
+    end
+
+    def self.build_cautious_provisional_guidance(provisional_high_sev_count:, provisional_devices:, is_stn:)
+      return nil if provisional_high_sev_count.zero? || provisional_devices.empty?
+
+      labels = provisional_devices.map(&:short_label).uniq.join(", ")
+      if is_stn
+        "A safety or security notice exists for specific models in your #{labels} brand family. " \
+          "Do not unplug or replace your device yet—check the model sticker on the back or bottom first to see if it applies."
+      else
+        "#{provisional_high_sev_count} family-level high-severity advisory matches provisional guess node(s) (#{labels}). " \
+          "Verify exact hardware revision / PURL before taking remediation action."
+      end
+    end
+
+    def self.build_phone_a_friend_advisor(helper_profile:, provisional_high_sev_count:, provisional_devices:)
+      profile = helper_profile.is_a?(Hash) ? helper_profile.transform_keys(&:to_sym) : {}
+      helper_name = profile[:name].to_s.strip
+      relationship = profile[:relationship].to_s.strip
+      linked_pro = !!profile[:linked_pro_account]
+      device_label = provisional_devices.first&.short_label || "home device"
+
+      if linked_pro && !helper_name.empty?
+        {
+          mode: "linked_family_account",
+          advisor_invoked: true,
+          delegated_to_pro_dashboard: true,
+          helper_name: helper_name,
+          summary: "We've flagged this #{device_label} model check on #{helper_name}'s Tuesday.sh Pro dashboard so they can verify the exact model and firmware for you.",
+          shareable_message: nil
+        }
+      elsif !helper_name.empty?
+        rel_clause = relationship.empty? ? helper_name : "your #{relationship} #{helper_name}"
+        {
+          mode: "unlinked_helper",
+          advisor_invoked: true,
+          delegated_to_pro_dashboard: false,
+          helper_name: helper_name,
+          summary: "Next time you talk to #{rel_clause}, ask them to check the model sticker on your #{device_label}—or tap below to send a quick note.",
+          shareable_message: "Hi #{helper_name}, when you have a minute, could you help me check the model number sticker on my #{device_label}?"
+        }
+      else
+        {
+          mode: "standalone",
+          advisor_invoked: false,
+          delegated_to_pro_dashboard: false,
+          helper_name: nil,
+          summary: provisional_high_sev_count.positive? ? "Check the silver or white model sticker on your #{device_label} and select your exact model in the app." : nil,
+          shareable_message: nil
+        }
+      end
     end
   end
 end

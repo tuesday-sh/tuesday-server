@@ -321,6 +321,7 @@ module Bulletins
       app_flavor: "tuesday",
       muted_feed_slugs: ["lg-esphome-iot"],
       tracked_devices: nil,
+      helper_profile: nil,
       lake_dir: ENV.fetch("GOLD_LAKE_DIR", DEFAULT_LAKE_DIR)
     )
       feeds = load_gold_feeds(lake_dir: lake_dir)
@@ -347,7 +348,8 @@ module Bulletins
         tracked_devices: devices,
         muted_feed_ids: muted_ids,
         curated_bulletins: bulletins,
-        app_flavor: app_flavor
+        app_flavor: app_flavor,
+        helper_profile: helper_profile
       )
     end
 
