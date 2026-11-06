@@ -276,21 +276,23 @@ module Bulletins
     def self.assemble_bulletins_from_gold(
       app_flavor: "tuesday",
       muted_feed_slugs: ["lg-esphome-iot"],
+      tracked_devices: nil,
       lake_dir: ENV.fetch("GOLD_LAKE_DIR", DEFAULT_LAKE_DIR)
     )
       feeds = load_gold_feeds(lake_dir: lake_dir)
       feeds_by_slug = feeds.each_with_object({}) { |f, h| h[f.slug] = f }
       bulletins = load_gold_bulletins(lake_dir: lake_dir, feeds_by_slug: feeds_by_slug)
 
-      devices = golden_tracked_devices.map do |d|
+      source_devices = tracked_devices.nil? ? golden_tracked_devices : tracked_devices
+      devices = source_devices.map do |d|
         InboxAssembler::TrackedDeviceStruct.new(
-          id: d[:id],
-          port_index: d[:port_index],
-          short_label: d[:short_label],
-          purls: d[:purls],
-          confidence_tier: d[:confidence_tier],
-          candidate_models: d[:candidate_models],
-          excluded_purl_prefixes: d[:excluded_purl_prefixes]
+          id: d[:id] || d["id"],
+          port_index: d[:port_index] || d["port_index"],
+          short_label: d[:short_label] || d["short_label"],
+          purls: d[:purls] || d["purls"] || [],
+          confidence_tier: (d[:confidence_tier] || d["confidence_tier"] || :confirmed).to_sym,
+          candidate_models: d[:candidate_models] || d["candidate_models"] || [],
+          excluded_purl_prefixes: d[:excluded_purl_prefixes] || d["excluded_purl_prefixes"] || []
         )
       end
 
@@ -306,8 +308,8 @@ module Bulletins
     end
 
     # Builds the 128-LED At-a-Glance Status Matrix (ordered Z0 -> Z4) and the Action-First Device List
-    def self.assemble_inventory(include_ok: false, zone_filter: "all")
-      named_devices = golden_tracked_devices
+    def self.assemble_inventory(include_ok: false, zone_filter: "all", tracked_devices: nil)
+      named_devices = tracked_devices.nil? ? golden_tracked_devices : tracked_devices
       zone_counts = {
         "z0_core" => 16,
         "z1_trusted" => 32,

@@ -1,7 +1,7 @@
 services:
   db:
-    image: postgres:12-alpine
-    environment: 
+    image: cgr.dev/chainguard/postgres:latest
+    environment:
       - POSTGRES_HOST_AUTH_METHOD=trust
     volumes:
       - ./tmp/db:/var/lib/postgresql/data
@@ -11,18 +11,18 @@ services:
       - production
   web:
     build: .
-    command: "puma"
+    command: "bundle exec puma"
     volumes:
       - .:/usr/src/app
     ports:
       - "3000:3000"
     depends_on:
-      - db 
+      - db
     profiles:
       - production
   dev:
     build: .
-    command: "puma"
+    command: "bundle exec puma"
     volumes:
       - .:/usr/src/app
     ports:

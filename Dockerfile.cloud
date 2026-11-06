@@ -1,0 +1,59 @@
+# syntax=docker/dockerfile:1
+# Multi-stage Chainguard Wolfi production image for tuesday-server (GCP Cloud Run Gen2)
+FROM cgr.dev/chainguard/wolfi-base:latest AS builder
+
+RUN apk update && apk add --no-cache \
+    build-base \
+    git \
+    ruby-3.3 \
+    ruby-3.3-dev \
+    postgresql-dev \
+    sqlite-dev \
+    yaml-dev \
+    zlib-dev \
+    libffi-dev \
+    openssl-dev \
+    tzdata \
+    nodejs
+
+WORKDIR /app
+ENV RAILS_ENV=production \
+    BUNDLE_DEPLOYMENT=1 \
+    BUNDLE_PATH=/app/vendor/bundle \
+    BUNDLE_WITHOUT="development:test"
+
+COPY Gemfile Gemfile.lock ./
+RUN gem install bundler -v 2.5.20 --no-document && \
+    bundle config set --local deployment 'true' && \
+    bundle config set --local without 'development test' && \
+    bundle install --jobs 4 --retry 3
+
+COPY . .
+RUN SECRET_KEY_BASE_DUMMY=1 bundle exec rails assets:precompile
+
+# Final Hardened Runtime Stage (Non-root 65532:65532)
+FROM cgr.dev/chainguard/wolfi-base:latest AS runtime
+
+RUN apk update && apk add --no-cache \
+    ruby-3.3 \
+    libpq \
+    sqlite-libs \
+    yaml \
+    tzdata \
+    ca-certificates
+
+WORKDIR /app
+ENV RAILS_ENV=production \
+    RAILS_LOG_TO_STDOUT=true \
+    RAILS_SERVE_STATIC_FILES=true \
+    BUNDLE_DEPLOYMENT=1 \
+    BUNDLE_PATH=/app/vendor/bundle \
+    BUNDLE_WITHOUT="development:test" \
+    PORT=8080
+
+COPY --from=builder --chown=65532:65532 /app /app
+
+USER 65532:65532
+EXPOSE 8080
+
+CMD ["bundle", "exec", "puma", "-C", "config/puma.rb", "-p", "8080"]

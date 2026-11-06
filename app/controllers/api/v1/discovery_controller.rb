@@ -13,6 +13,7 @@ module Api
     # processed strictly in ephemeral RAM during the upstream LLM call, and never
     # persisted to disk, databases, or object storage.
     class DiscoveryController < ApplicationController
+      include Api::V1::SiteScoping
       skip_before_action :verify_authenticity_token, raise: false
 
       MAX_IMAGES_PER_TURN = 2
@@ -85,17 +86,59 @@ module Api
           suggested_trust_zone: params[:suggested_trust_zone].presence || "z1_trusted"
         )
 
+        enrolled_device = persist_confirmed_device_to_site(
+          confirmed_vendor: confirmed_vendor,
+          confirmed_model: confirmed_model,
+          lifecycle_tier: params[:suggested_lifecycle_tier].presence || "active",
+          trust_zone: params[:suggested_trust_zone].presence || "z1_trusted"
+        )
+
         render json: {
           status: "confirmed",
           sessionId: record["sessionId"],
           confirmedVendor: record["confirmedVendor"],
           confirmedModel: record["confirmedModel"],
           wasEdited: record["wasEdited"],
+          enrolledDevice: enrolled_device&.to_gold_hash,
           privacyAttestation: Discovery::HardwareVisionService::PRIVACY_ATTESTATION
         }
       end
 
       private
+
+      def persist_confirmed_device_to_site(confirmed_vendor:, confirmed_model:, lifecycle_tier:, trust_zone:)
+        return nil if ActiveModel::Type::Boolean.new.cast(params[:enroll]) == false
+
+        site = current_network_site(auto_create: true)
+        return nil if site.nil?
+
+        existing = site.monitored_devices.find_by(vendor: confirmed_vendor, model_number: confirmed_model)
+        return existing if existing
+
+        next_port = params[:port_index].present? ? params[:port_index].to_i : site.next_available_port_index
+        return nil if next_port.nil? || next_port > NetworkSite::MAX_PORTS_M1
+
+        vendor_slug = confirmed_vendor.to_s.parameterize.presence || "generic"
+        model_slug = confirmed_model.to_s.parameterize.presence || "device"
+        ver = params[:version].presence || "1.0.0"
+
+        device = site.monitored_devices.build(
+          port_index: next_port,
+          category_code: params[:category_code].presence || "C8",
+          trust_zone: MonitoredDevice::VALID_TRUST_ZONES.include?(trust_zone) ? trust_zone : "z1_trusted",
+          port_state: params[:port_state].presence || "ok",
+          confidence_tier: "confirmed",
+          short_label: confirmed_model[0, 14],
+          name: params[:name].presence || "#{confirmed_vendor} #{confirmed_model}".strip,
+          vendor: confirmed_vendor,
+          model_number: confirmed_model,
+          room_location: params[:room_location].presence || "Rack / Room",
+          version: ver,
+          lifecycle_tier: MonitoredDevice::VALID_LIFECYCLE_TIERS.include?(lifecycle_tier) ? lifecycle_tier : "active"
+        )
+        device.purls_list = Array(params[:purls].presence || ["pkg:generic/#{vendor_slug}/#{model_slug}@#{ver}"])
+        device.save ? device : nil
+      end
 
       def authenticate_and_rate_limit!
         @client_platform = (request.headers["X-Tuesday-Client-Platform"].presence || params[:client_platform].presence || "unknown").to_s.downcase

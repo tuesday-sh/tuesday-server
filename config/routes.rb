@@ -11,9 +11,14 @@ Rails.application.routes.draw do
   namespace :api do
     namespace :v1 do
       resources :bulletins, only: [:index]
-      resources :inventory, only: [:index]
+      resources :inventory, only: [:index, :create, :update, :destroy] do
+        collection do
+          post :seed_demo
+        end
+      end
       post "discovery/analyze", to: "discovery#analyze"
       post "discovery/confirm", to: "discovery#confirm"
+      post "billing/verify", to: "billing#verify"
     end
   end
 end
