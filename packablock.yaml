@@ -366,3 +366,43 @@ $yaml-chain-meta:
   data_hash: 84ae45579b292513e27dba03d64ee2309da20fd70020f2bf80f6e28a167916b0
   prev_meta_hash: 7987594684b963fd44c441035184af569bf625ab1bf538b3381e838c965a9832
   meta_hash: 0efeaf3a85630dc60384786693978096c2c4c100137e4a2b56ed8277f68d77ff
+---
+subject: package-lock.json
+diff_strategy: semantic
+event: update
+reason: "M1 Chainguard Wolfi Ruby 3.3 baseline & NetworkSite persistence"
+changes:
+  upgraded:
+    - name: rails
+      from: "7.2.2.1"
+      to: "7.2.2.2"
+  added: []
+  removed: []
+lockfiles:
+  package-lock.json:
+    packages:
+      - rails:
+          - old: "7.2.2.1"
+          - new: "7.2.2.2"
+          - loc: "16,18"
+---
+$yaml-chain-meta:
+    version: 1.0.0
+    block_index: 2
+    timestamp: "2026-11-06T19:48:42.681Z"
+    hashing_strategy: raw
+    data_hash: ae193fd6cce3b848ac46ef137e08e7896a4f0f22826b9e905bc50acd7bf484bf
+    prev_meta_hash: 0efeaf3a85630dc60384786693978096c2c4c100137e4a2b56ed8277f68d77ff
+    meta_hash: 88f59fe7ed17ba0c3212ef0ecb3ca8a6099505891ecb5525879c6f7dcc7802b4
+    parent_block_cid: bafkreiax2oqwuohopj66gtjte6i6v4g5m77xkj3jjsdqpgklxef53hzcxu
+    block_cid: bafkreif7z5mlevi4pdw7jxdhio7nykrb6vrjpfjp3cdjzp6kp46ougihwi
+    layer_digest: sha256:6bba7dd7291bcddc2becd878ac053f18233fefb71a0fb9bf5c070340a0a08d57
+    signature_auth:
+        provider: did:key/ed25519
+        signer_identity: release-bot@packablock.com
+        did: did:key:z6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw
+        commit: "0587804"
+        git_signature: |-
+            -----BEGIN SSH SIGNATURE-----
+            X9W96KO9ZWP7ITSmI0c/rY176t4TpPuW1F0VkvO30s+b7UEhKLR9pAej6glwKgB5O8K24uzVsHTv+72xadbmBQ==
+            -----END SSH SIGNATURE-----

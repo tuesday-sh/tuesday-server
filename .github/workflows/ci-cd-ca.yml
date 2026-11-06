@@ -23,7 +23,7 @@ jobs:
       - name: Set up Ruby 3.3
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.3.0"
+          ruby-version: "3.3"
           bundler-cache: true
 
       - name: Run Rails Database Migrations & Test Suite
@@ -47,10 +47,6 @@ jobs:
         with:
           go-version: "1.24"
 
-      - name: Install Anchore Syft (CycloneDX v1.5 SBOM Generator)
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sudo sh -s -- -b /usr/local/bin
-
       - name: Build Chainguard Wolfi Container Image (Dockerfile.cloud)
         run: |
           docker build -f Dockerfile.cloud -t tuesday-server:${GITHUB_SHA::7} .
@@ -63,37 +59,33 @@ jobs:
           PKABLK_API_KEY: ${{ secrets.PKABLK_API_KEY }}
         run: |
           git clone --depth 1 https://github.com/aaronbronow/continuous-attestation.git /tmp/ca
-          go build -C /tmp/ca -o /usr/local/bin/pkaput ./cmd/pkaput
+          go build -C /tmp/ca -o /tmp/ca/bin/pkaput ./cmd/pkaput
+          mkdir -p test/coredns test/fixtures
+          cp /tmp/ca/test/coredns/db.layers.example.internal test/coredns/db.layers.example.internal
+          cp /tmp/ca/test/fixtures/packablock.policy.yaml test/fixtures/packablock.policy.yaml
+          cp /tmp/ca/test/fixtures/ed25519.key.json test/fixtures/ed25519.key.json
 
-          # 1. Verify Packablock chain via pkaput
-          pkaput check packablock.yaml
+          # 1. Verify Packablock chain via pkaput (also invokes official pkablk CLI)
+          /tmp/ca/bin/pkaput check packablock.yaml
 
-          # 2. Generate mock/container layer archives + CycloneDX SBOM + DSSEv1 + CARv1 bundle
-          mkdir -p bin/layers
-          docker save tuesday-server:${GITHUB_SHA::7} | gzip > bin/layers/layer1.tar.gz
-          cp packablock.yaml bin/layers/layer2.tar.gz
-          cp Gemfile.lock bin/layers/layer3.tar.gz
-
-          pkaput squash-release \
+          # 2. Squash OCI layers, generate CycloneDX v1.5 SBOM + DSSEv1 + CARv1 bundle
+          /tmp/ca/bin/pkaput squash-release \
             --chain packablock.yaml \
             --layers 3 \
             --output-tag "tuesday-server:${GITHUB_SHA::7}" \
             --storage local
 
-          # 3. Publish RFC 4648 Base32 DNSLink TXT record to examples.packablock.com
+          # 3. Publish RFC 4648 Base32 DNSLink TXT record to examples.packablock.com & verify 3 Zero-Trust Gates
+          /tmp/ca/bin/pkaput publish-dns --domain "examples.packablock.com" --provider coredns
           if [ -n "$CF_API_TOKEN" ] && [ -n "$CF_ZONE_ID" ]; then
-            pkaput publish-dns --domain "examples.packablock.com" --provider cloudflare
-            pkaput preflight-gate --file bin/layers/flattened.tar.gz --domain "examples.packablock.com"
-          else
-            echo "CF_API_TOKEN not set; verifying DNSLink preflight-gate via local CoreDNS Loopback..."
-            curl -L -s https://github.com/coredns/coredns/releases/download/v1.11.1/coredns_1.11.1_linux_amd64.tgz | tar -xz
-            sudo mv coredns /usr/local/bin/
-            pkaput publish-dns --domain "examples.packablock.com" --provider local
-            sudo nohup coredns -conf Corefile -dns.port 53 > coredns.log 2>&1 &
-            sleep 2
-            echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
-            pkaput preflight-gate --file bin/layers/flattened.tar.gz --domain "examples.packablock.com"
+            /tmp/ca/bin/pkaput publish-dns --domain "examples.packablock.com" --provider cloudflare
           fi
+          /tmp/ca/bin/pkaput preflight-gate \
+            --file bin/layers/flattened.tar.gz \
+            --domain "examples.packablock.com" \
+            --policy test/fixtures/packablock.policy.yaml \
+            --query-pkg "rails" \
+            --query-version "7.2.2.2"
 
       - name: Upload Continuous Attestation Artifacts (CycloneDX SBOM, DSSEv1, CARv1)
         uses: actions/upload-artifact@v4
@@ -101,9 +93,9 @@ jobs:
           name: tuesday-server-ca-bundle-${{ github.sha }}
           path: |
             packablock.yaml
-            sbom.cdx.json
-            attestation.dsse.json
-            release-bundle.car
+            bin/release-bundle.car
+            bin/layers/flattened.tar.gz
+            bin/ipfs-cache/
 
   deploy-cloud-run:
     name: "Deploy Verified Chainguard Image to GCP Cloud Run (us-west1)"
