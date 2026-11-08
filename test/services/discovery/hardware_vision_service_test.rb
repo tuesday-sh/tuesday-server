@@ -120,4 +120,124 @@ class HardwareVisionServiceTest < Minitest::Test
     # 1000 input * $0.15/1M ($0.00015) + 200 output * $0.60/1M ($0.00012) = $0.00027
     assert_in_delta 0.00027, gemini_cost, 0.000001
   end
+
+  def test_debug_mode_gold_datalake_alignment_and_livetail_log
+    Dir.mktmpdir do |tmpdir|
+      ENV["BRONZE_LAKE_DIR"] = tmpdir
+      result = Discovery::HardwareVisionService.analyze(
+        session_id: "test-session-debug-audit",
+        turn_index: 1,
+        client_platform: "android",
+        device_id: "pixel-9-dev",
+        provider_override: "heuristic",
+        extracted_identifiers: [],
+        images_base64: ["dGVzdF9pbWFnZV9ieXRlcw=="],
+        debug: true
+      )
+
+      assert_equal 2, result["candidates"].size
+      first_cand = result["candidates"][0]
+      second_cand = result["candidates"][1]
+
+      # Candidate 1 (Ubiquiti UCG-Ultra) aligns with Gold Datalake
+      assert_equal true, first_cand.dig("goldAlignment", "aligned")
+      assert_equal "GOLD ALIGNED", first_cand.dig("goldAlignment", "statusLabel")
+      assert_equal "ubiquiti-advisories", first_cand.dig("goldAlignment", "matchedFeedSlug")
+
+      # Candidate 2 (GL.iNet GL-MT3000) is an unaligned raw match
+      assert_equal false, second_cand.dig("goldAlignment", "aligned")
+      assert_equal "UNALIGNED RAW MATCH", second_cand.dig("goldAlignment", "statusLabel")
+      assert_includes second_cand.dig("goldAlignment", "inferredPurl"), "pkg:generic/gl-inet/gl-mt3000"
+
+      # Debug log text and trace are returned
+      assert_includes result["debugLogText"], "=== TUESDAY VISION DEBUG LOG"
+      assert_includes result["debugLogText"], "[✓ GOLD ALIGNED]"
+      assert_includes result["debugLogText"], "[⚠ UNALIGNED RAW]"
+      assert result["debugTrace"].any? { |t| t.include?("[LLM_PARSE]") }
+      assert result["debugTrace"].any? { |t| t.include?("[PURL_RESOLVE]") }
+      assert result["debugTrace"].any? { |t| t.include?("[GOLD_AUDIT]") }
+
+      # Livetail files are written with zero base64 image leak
+      livetail_log = Telemetry::HostedAiLogger.livetail_log_path(bronze_dir: tmpdir)
+      assert File.exist?(livetail_log)
+      log_contents = File.read(livetail_log)
+      refute_includes log_contents, "dGVzdF9pbWFnZV9ieXRlcw=="
+      assert_includes log_contents, "test-session-debug-audit"
+
+      recent = Telemetry::HostedAiLogger.read_recent_livetail(limit: 5, bronze_dir: tmpdir)
+      assert_equal 1, recent.size
+      assert_equal "test-session-debug-audit", recent.first["sessionId"]
+    end
+  end
+
+  def test_three_tier_gold_alignment_distinguishes_exact_model_vs_vendor_feed_only
+    raw_candidates = [
+      {
+        "manufacturer" => "Ubiquiti",
+        "modelNumber" => "UCG-Ultra",
+        "displayName" => "UniFi Cloud Gateway Ultra (UCG-Ultra)",
+        "deviceCategory" => "Gateway / Router",
+        "confidencePercent" => 92,
+        "reasoning" => "Exact UCG-Ultra label.",
+        "suggestedHostname" => "ucg-ultra",
+        "suggestedOsDetails" => "UniFi OS",
+        "suggestedPackageManager" => "firmware"
+      },
+      {
+        "manufacturer" => "Ubiquiti",
+        "modelNumber" => "UCG-Max",
+        "displayName" => "UniFi Cloud Gateway Max",
+        "deviceCategory" => "Gateway / Router",
+        "confidencePercent" => 5,
+        "reasoning" => "Similar white desktop enclosure.",
+        "suggestedHostname" => "ucg-max",
+        "suggestedOsDetails" => "UniFi OS",
+        "suggestedPackageManager" => "firmware"
+      },
+      {
+        "manufacturer" => "GL.iNet",
+        "modelNumber" => "GL-MT3000",
+        "displayName" => "GL.iNet Beryl AX",
+        "deviceCategory" => "Router",
+        "confidencePercent" => 2,
+        "reasoning" => "Compact white router.",
+        "suggestedHostname" => "gl-mt3000",
+        "suggestedOsDetails" => "OpenWrt",
+        "suggestedPackageManager" => "firmware"
+      }
+    ]
+
+    traces = []
+    audited = Discovery::HardwareVisionService.send(
+      :audit_candidates_against_gold_datalake,
+      raw_candidates,
+      trace: ->(stage, msg) { traces << "[#{stage}] #{msg}" }
+    )
+
+    # 1. UCG-Ultra -> Exact Model Match (GOLD ALIGNED)
+    c1 = audited[0]["goldAlignment"]
+    assert_equal "pkg:generic/ui/ucg-ultra", c1["inferredPurl"]
+    assert_equal true, c1["aligned"]
+    assert_equal false, c1["vendorFeedOnly"]
+    assert_equal "GOLD ALIGNED", c1["statusLabel"]
+    assert_equal "ubiquiti-advisories", c1["matchedFeedSlug"]
+
+    # 2. UCG-Max -> Same vendor prefix (pkg:generic/ui/), but model not in Gold Catalog
+    c2 = audited[1]["goldAlignment"]
+    assert_equal "pkg:generic/ui/ucg-max", c2["inferredPurl"]
+    assert_equal false, c2["aligned"]
+    assert_equal true, c2["vendorFeedOnly"]
+    assert_equal "UNALIGNED MODEL (VENDOR FEED ONLY)", c2["statusLabel"]
+    assert_equal "ubiquiti-advisories", c2["matchedFeedSlug"]
+
+    # 3. GL-MT3000 -> Neither model nor vendor prefix in Gold Catalog
+    c3 = audited[2]["goldAlignment"]
+    assert_equal "pkg:generic/gl-inet/gl-mt3000", c3["inferredPurl"]
+    assert_equal false, c3["aligned"]
+    assert_equal false, c3["vendorFeedOnly"]
+    assert_equal "UNALIGNED RAW MATCH", c3["statusLabel"]
+    assert_nil c3["matchedFeedSlug"]
+
+    assert_equal 6, traces.size # 3 PURL_RESOLVE + 3 GOLD_AUDIT
+  end
 end

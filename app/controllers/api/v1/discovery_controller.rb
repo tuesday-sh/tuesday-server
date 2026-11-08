@@ -21,7 +21,8 @@ module Api
       ANON_HOURLY_LIMIT = 30
       AUTH_HOURLY_LIMIT = 300
 
-      before_action :authenticate_and_rate_limit!
+      before_action :authenticate_and_rate_limit!, except: [:livetail]
+      before_action :authenticate_livetail!, only: [:livetail]
 
       # POST /api/v1/discovery/analyze
       def analyze
@@ -45,6 +46,8 @@ module Api
                            params[:previous_guess]
                          end
 
+        debug_mode = ActiveModel::Type::Boolean.new.cast(params[:debug] || request.headers["X-Tuesday-Debug"]) || false
+
         payload = Discovery::HardwareVisionService.analyze(
           session_id: params[:session_id].presence || "tuesday-#{@client_platform}-#{SecureRandom.hex(4)}",
           turn_index: (params[:turn_index] || 1).to_i,
@@ -54,13 +57,54 @@ module Api
           previous_guess: previous_guess,
           extracted_identifiers: params[:extracted_identifiers] || [],
           user_clue_notes: Array(params[:user_clue_notes]),
-          images_base64: raw_images
+          images_base64: raw_images,
+          debug: debug_mode
         )
 
         response.set_header("X-Tuesday-Image-Retention", "none_ephemeral_ram_only")
         render json: payload
       ensure
         raw_images&.clear if raw_images.respond_to?(:clear)
+      end
+
+      # GET /api/v1/discovery/livetail
+      def livetail
+        limit = (params[:limit] || params[:n] || 15).to_i.clamp(1, 100)
+        entries = Telemetry::HostedAiLogger.read_recent_livetail(limit: limit)
+
+        if params[:session_id].present?
+          entries = entries.select { |e| e["sessionId"].to_s == params[:session_id].to_s }
+        end
+        if params[:device_id].present?
+          entries = entries.select { |e| e["deviceId"].to_s == params[:device_id].to_s }
+        end
+
+        if params[:format].to_s == "text"
+          text_body = entries.map { |e| e["debugLogText"] }.compact.join("\n#{'=' * 80}\n")
+          render plain: text_body.presence || "No vision debug livetail entries recorded yet.\n"
+          return
+        end
+
+        if ActiveModel::Type::Boolean.new.cast(params[:stream])
+          response.headers["Content-Type"] = "text/event-stream"
+          response.headers["Cache-Control"] = "no-cache"
+          response.headers["X-Accel-Buffering"] = "no"
+          sse_body = entries.map { |e| "event: vision_turn\ndata: #{JSON.generate(e)}\n\n" }.join
+          render plain: sse_body
+          return
+        end
+
+        payload = {
+          status: "ok",
+          count: entries.size,
+          entries: entries
+        }
+        unless Rails.env.production?
+          payload[:livetailLogPath] = Telemetry::HostedAiLogger.livetail_log_path
+          payload[:livetailJsonlPath] = Telemetry::HostedAiLogger.livetail_jsonl_path
+        end
+
+        render json: payload
       end
 
       # POST /api/v1/discovery/confirm
@@ -138,6 +182,40 @@ module Api
         )
         device.purls_list = Array(params[:purls].presence || ["pkg:generic/#{vendor_slug}/#{model_slug}@#{ver}"])
         device.save ? device : nil
+      end
+
+      def authenticate_livetail!
+        bearer_token = request.headers["Authorization"].to_s[/\ABearer\s+(.+)\z/i, 1]&.strip
+        livetail_header = request.headers["X-Tuesday-Livetail-Token"].to_s.strip
+        supplied_token = livetail_header.presence || bearer_token.to_s
+        expected_pilot_token = ENV.fetch("TUESDAY_PILOT_CLIENT_TOKEN", "tuesday-pilot-v1-public-client-token")
+
+        # 1. Check dedicated TUESDAY_LIVETAIL_TOKEN (constant-time comparison, never matches public pilot token)
+        expected_livetail_token = ENV["TUESDAY_LIVETAIL_TOKEN"].to_s.strip
+        if expected_livetail_token.length >= 16 &&
+           supplied_token.present? &&
+           supplied_token != expected_pilot_token &&
+           ActiveSupport::SecurityUtils.secure_compare(supplied_token, expected_livetail_token)
+          return
+        end
+
+        # 2. Check database ApiKey (excluding public pilot client token)
+        if supplied_token.present? && supplied_token != expected_pilot_token && defined?(ApiKey) && ApiKey.table_exists?
+          api_key = ApiKey.find_by(token: supplied_token)
+          return if api_key.present?
+        end
+
+        # 3. Local dev / Tailscale subnet allowance ONLY in development/test (unless ?require_auth=true)
+        if (Rails.env.development? || Rails.env.test?) && !ActiveModel::Type::Boolean.new.cast(params[:require_auth])
+          ip = request.remote_ip.to_s
+          if ip == "127.0.0.1" || ip == "::1" || ip.start_with?("192.168.", "10.", "100.")
+            return
+          end
+        end
+
+        render json: {
+          error: "Unauthorized: livetail requires a valid X-Tuesday-Livetail-Token or admin Authorization Bearer token"
+        }, status: :unauthorized
       end
 
       def authenticate_and_rate_limit!

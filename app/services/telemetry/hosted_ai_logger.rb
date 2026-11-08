@@ -20,8 +20,12 @@ module Telemetry
     CLOUDWATCH_LOG_GROUP = ENV.fetch("TUESDAY_CW_LOG_GROUP", "/tuesday/codeburn")
     CLOUDWATCH_LOG_STREAM = ENV.fetch("TUESDAY_CW_HOSTED_STREAM", "hosted-ai-v1")
 
-    DEFAULT_BRONZE_DIR = File.expand_path("../../../../../tuesday-datalake/bronze", __FILE__)
+    SIBLING_BRONZE_DIR = File.expand_path("../../../../../tuesday-datalake/bronze", __FILE__)
+    CONTAINER_BRONZE_DIR = "/tmp/tuesday-datalake/bronze"
+    DEFAULT_BRONZE_DIR = File.directory?(File.expand_path("../../../../../tuesday-datalake", __FILE__)) ? SIBLING_BRONZE_DIR : CONTAINER_BRONZE_DIR
     WORKSPACE_AWS_CREDS = File.expand_path("../../../../../.agents/configs/aws-agy/credentials", __FILE__)
+    LIVETAIL_LOG_FILENAME = "vision_debug_livetail.log"
+    LIVETAIL_JSONL_FILENAME = "vision_debug_livetail.jsonl"
 
     # Per-1M token pricing in USD
     MODEL_PRICING_PER_1M = {
@@ -170,6 +174,43 @@ module Telemetry
         end
       rescue StandardError => e
         Rails.logger.warn("[Telemetry::HostedAiLogger] Bronze write skipped: #{e.message}")
+      end
+
+      def livetail_log_path(bronze_dir: ENV.fetch("BRONZE_LAKE_DIR", DEFAULT_BRONZE_DIR))
+        File.join(bronze_dir, LIVETAIL_LOG_FILENAME)
+      end
+
+      def livetail_jsonl_path(bronze_dir: ENV.fetch("BRONZE_LAKE_DIR", DEFAULT_BRONZE_DIR))
+        File.join(bronze_dir, LIVETAIL_JSONL_FILENAME)
+      end
+
+      def write_debug_livetail(entry, formatted_text: nil, bronze_dir: ENV.fetch("BRONZE_LAKE_DIR", DEFAULT_BRONZE_DIR))
+        FileUtils.mkdir_p(bronze_dir)
+        File.open(livetail_jsonl_path(bronze_dir: bronze_dir), "a") do |f|
+          f.puts(JSON.generate(entry))
+          f.flush
+        end
+        if formatted_text && !formatted_text.to_s.strip.empty?
+          File.open(livetail_log_path(bronze_dir: bronze_dir), "a") do |f|
+            f.puts(formatted_text)
+            f.puts("=" * 80)
+            f.flush
+          end
+        end
+      rescue StandardError => e
+        Rails.logger.warn("[Telemetry::HostedAiLogger] Livetail write skipped: #{e.message}")
+      end
+
+      def read_recent_livetail(limit: 15, bronze_dir: ENV.fetch("BRONZE_LAKE_DIR", DEFAULT_BRONZE_DIR))
+        path = livetail_jsonl_path(bronze_dir: bronze_dir)
+        return [] unless File.exist?(path)
+
+        lines = File.readlines(path).last(limit.to_i.clamp(1, 100))
+        lines.filter_map do |line|
+          JSON.parse(line)
+        rescue StandardError
+          nil
+        end
       end
 
       def ship_to_cloudwatch(record)

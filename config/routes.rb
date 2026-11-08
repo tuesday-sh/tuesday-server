@@ -18,6 +18,7 @@ Rails.application.routes.draw do
       end
       post "discovery/analyze", to: "discovery#analyze"
       post "discovery/confirm", to: "discovery#confirm"
+      get "discovery/livetail", to: "discovery#livetail"
       post "billing/verify", to: "billing#verify"
     end
   end

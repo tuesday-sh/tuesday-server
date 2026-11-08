@@ -4,6 +4,7 @@ require "json"
 require "net/http"
 require "uri"
 require "fileutils"
+require_relative "../bulletins/gold_snapshot_loader"
 
 module Discovery
   # Server-Side Hardware Vision & Catalog Short-Circuit Service.
@@ -136,13 +137,29 @@ module Discovery
         previous_guess: nil,
         extracted_identifiers: [],
         user_clue_notes: [],
-        images_base64: []
+        images_base64: [],
+        debug: false
       )
         start_monotonic = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         normalized_clues = normalize_incoming_clues(extracted_identifiers, user_clue_notes)
         ephemeral_frames = Array(images_base64).compact.first(2)
+        frame_kb_sizes = ephemeral_frames.map { |f| ((f.to_s.bytesize * 3.0 / 4.0) / 1024.0).round(1) }
+
+        debug_trace = []
+        elapsed_ms = -> { ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_monotonic) * 1000).round }
+        trace = lambda do |stage, msg|
+          debug_trace << "[+#{elapsed_ms.call}ms] [#{stage}] #{msg}"
+        end
+
+        trace.call(
+          "INIT",
+          "session=#{session_id} turn=#{turn_index} platform=#{client_platform} provider_override=#{provider_override} " \
+          "frames=#{ephemeral_frames.size} (#{frame_kb_sizes.map { |k| "#{k}KB" }.join(', ').presence || '0KB'}) " \
+          "clues=#{normalized_clues[:flat_list].inspect} debug=#{debug}"
+        )
 
         result = nil
+        raw_llm_response = nil
         usage = { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0 }
         provider_used = "CatalogCache"
         model_used = "gold-short-circuit"
@@ -154,20 +171,39 @@ module Discovery
           if %w[auto catalog].include?(provider_override.to_s.downcase)
             catalog_match = match_catalog_short_circuit(normalized_clues)
             if catalog_match
-              result = catalog_match
-              short_circuited = true
-              provider_used = "CatalogCache"
-              model_used = "gold-short-circuit"
+              if debug && ephemeral_frames.any? && provider_override.to_s.downcase != "catalog"
+                trace.call(
+                  "CATALOG_SHORT_CIRCUIT",
+                  "Matched #{catalog_match['vendor']} #{catalog_match['model']} ($0.00 short-circuit), " \
+                  "but bypassing short-circuit because debug=true and #{ephemeral_frames.size} image(s) were submitted."
+                )
+              else
+                result = catalog_match
+                short_circuited = true
+                provider_used = "CatalogCache"
+                model_used = "gold-short-circuit"
+                trace.call(
+                  "CATALOG_SHORT_CIRCUIT",
+                  "HIT -> #{catalog_match['vendor']} #{catalog_match['model']} (#{catalog_match['reasoning']})"
+                )
+              end
+            else
+              trace.call(
+                "CATALOG_SHORT_CIRCUIT",
+                normalized_clues[:flat_list].empty? ? "SKIP (no prior text/barcode clues on turn #{turn_index})" : "MISS (no exact match in confirmed_hardware_identifiers.json or BUILT_IN_CATALOG_SIGNATURES)"
+              )
             end
           end
 
           # Step 2: Upstream Vision LLM Router (Elastix Primary -> Gemini Failover)
           unless result
             if provider_override.to_s.downcase == "heuristic"
+              trace.call("ROUTER", "Using deterministic Heuristic mode (provider_override=heuristic)")
               result = heuristic_infer(turn_index: turn_index, previous_guess: previous_guess, clues: normalized_clues)
               provider_used = "Heuristic"
               model_used = "heuristic-fallback"
             elsif provider_override.to_s.downcase == "gemini"
+              trace.call("ROUTER", "Dispatching directly to GCP Gemini Interactions API (#{ENV.fetch('GEMINI_MODEL', 'gemini-3.8-flash')})")
               res_data = call_gemini_interactions(
                 turn_index: turn_index,
                 previous_guess: previous_guess,
@@ -175,11 +211,14 @@ module Discovery
                 ephemeral_frames: ephemeral_frames
               )
               result = res_data[:result]
+              raw_llm_response = res_data[:raw_text]
               usage = res_data[:usage]
               provider_used = "Google"
               model_used = res_data[:model]
+              trace.call("LLM_OK", "Gemini #{model_used} responded (in=#{usage[:input_tokens]} out=#{usage[:output_tokens]} cached=#{usage[:cache_read_tokens]} tokens)")
             else
               begin
+                trace.call("ROUTER", "Dispatching primary vision request to Elastix.ai (#{ENV.fetch('ELASTIX_MODEL', 'qwen3.8-27b')})")
                 res_data = call_elastix_chat_completions(
                   session_id: session_id,
                   turn_index: turn_index,
@@ -188,11 +227,14 @@ module Discovery
                   ephemeral_frames: ephemeral_frames
                 )
                 result = res_data[:result]
+                raw_llm_response = res_data[:raw_text]
                 usage = res_data[:usage]
                 provider_used = "Elastix"
                 model_used = res_data[:model]
+                trace.call("LLM_OK", "Elastix #{model_used} responded (in=#{usage[:input_tokens]} out=#{usage[:output_tokens]} cached=#{usage[:cache_read_tokens]} tokens)")
               rescue StandardError => elastix_err
                 Rails.logger.warn("[Discovery::HardwareVisionService] Elastix primary failed (#{elastix_err.message}); failing over to Gemini")
+                trace.call("LLM_WARN", "Elastix primary failed: #{elastix_err.message} -> failing over to GCP Gemini")
                 fallback_used = true
                 begin
                   res_data = call_gemini_interactions(
@@ -202,11 +244,14 @@ module Discovery
                     ephemeral_frames: ephemeral_frames
                   )
                   result = res_data[:result]
+                  raw_llm_response = res_data[:raw_text]
                   usage = res_data[:usage]
                   provider_used = "Google"
                   model_used = res_data[:model]
+                  trace.call("LLM_OK", "Gemini failover #{model_used} responded (in=#{usage[:input_tokens]} out=#{usage[:output_tokens]} cached=#{usage[:cache_read_tokens]} tokens)")
                 rescue StandardError => gemini_err
                   Rails.logger.warn("[Discovery::HardwareVisionService] Gemini failover failed (#{gemini_err.message}); using deterministic heuristic")
+                  trace.call("LLM_ERROR", "Gemini failover failed: #{gemini_err.message} -> falling back to Heuristic")
                   result = heuristic_infer(turn_index: turn_index, previous_guess: previous_guess, clues: normalized_clues)
                   provider_used = "Heuristic"
                   model_used = "heuristic-fallback"
@@ -219,8 +264,20 @@ module Discovery
           ephemeral_frames.clear
         end
 
+        raw_candidates_summary = Array(result["candidates"]).map.with_index(1) do |c, i|
+          "##{i} #{c['manufacturer']} #{c['modelNumber']} (#{c['confidencePercent']}%)"
+        end.join(", ")
+        trace.call(
+          "LLM_PARSE",
+          "Extracted #{Array(result['candidates']).size} candidate(s): [#{raw_candidates_summary}] | identifiers=#{JSON.generate(result['extractedIdentifiersObject'] || normalized_clues[:object])}"
+        )
+
+        # Step 3: Audit every candidate against the Gold Datalake (canonical_feeds, catalog_releases, confirmed_identifiers)
+        audited_candidates = audit_candidates_against_gold_datalake(Array(result["candidates"]), trace: trace)
+        result["candidates"] = audited_candidates
+
         latency_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_monotonic) * 1000).round
-        top_candidate = Array(result["candidates"]).first || {}
+        top_candidate = audited_candidates.first || {}
         top_vendor = result["vendor"] || top_candidate["manufacturer"] || "Unknown Vendor"
         top_model = result["model"] || top_candidate["modelNumber"] || "Unidentified Hardware"
         top_confidence = result["confidence"] || ((top_candidate["confidencePercent"] || 65).to_f / 100.0)
@@ -268,6 +325,48 @@ module Discovery
           "nextPhotoPrompt" => discovery_status == "matched_exact" ? nil : next_prompt
         }
 
+        debug_log_text = format_debug_log_text(
+          session_id: session_id,
+          turn_index: turn_index,
+          client_platform: client_platform,
+          provider_used: provider_used,
+          model_used: model_used,
+          latency_ms: latency_ms,
+          cost_usd: telemetry_record["costUSD"],
+          usage: usage,
+          visual_summary: result["visualSummary"],
+          extracted_identifiers: result["extractedIdentifiersObject"] || normalized_clues[:object],
+          candidates: audited_candidates,
+          raw_llm_response: raw_llm_response,
+          debug_trace: debug_trace
+        )
+
+        livetail_entry = {
+          "timestamp" => Time.now.utc.iso8601(3),
+          "sessionId" => session_id,
+          "turnIndex" => turn_index,
+          "clientPlatform" => client_platform,
+          "deviceId" => device_id,
+          "debugEnabled" => !!debug,
+          "frameCount" => frame_kb_sizes.size,
+          "frameSizesKb" => frame_kb_sizes,
+          "providerUsed" => provider_used,
+          "modelUsed" => model_used,
+          "fallbackUsed" => fallback_used,
+          "shortCircuited" => short_circuited,
+          "latencyMs" => latency_ms,
+          "costUSD" => telemetry_record["costUSD"],
+          "inputTokens" => usage[:input_tokens],
+          "outputTokens" => usage[:output_tokens],
+          "visualSummary" => result["visualSummary"],
+          "extractedIdentifiers" => result["extractedIdentifiersObject"] || normalized_clues[:object],
+          "candidates" => audited_candidates,
+          "rawLlmResponse" => raw_llm_response,
+          "debugTrace" => debug_trace,
+          "debugLogText" => debug_log_text
+        }
+        Telemetry::HostedAiLogger.write_debug_livetail(livetail_entry, formatted_text: debug_log_text)
+
         {
           # Mobile rich turn fields (Android & iOS)
           "visualSummary" => result["visualSummary"] || result["reasoning"] || "Analyzed device hardware and clues.",
@@ -275,7 +374,7 @@ module Discovery
           "recommendedClueTypes" => result["recommendedClueTypes"] || DEFAULT_CLUE_TYPES,
           "extractedIdentifiersObject" => result["extractedIdentifiersObject"] || normalized_clues[:object],
           "extractedIdentifiers" => normalized_clues[:flat_list],
-          "candidates" => Array(result["candidates"]),
+          "candidates" => audited_candidates,
           # Top-level summary, coaching & telemetry fields
           "vendor" => top_vendor,
           "model" => top_model,
@@ -293,6 +392,9 @@ module Discovery
           "shortCircuited" => short_circuited,
           "latencyMs" => latency_ms,
           "costUSD" => telemetry_record["costUSD"],
+          "debugTrace" => debug_trace,
+          "rawLlmResponse" => raw_llm_response,
+          "debugLogText" => debug_log_text,
           "privacyAttestation" => PRIVACY_ATTESTATION
         }
       end
@@ -476,7 +578,7 @@ module Discovery
           - "nextNarrowingQuestion": concise question asking for Barcode, Serial Number, QR Code, Model, or MAC Address
           - "recommendedClueTypes": array of strings from ["Model", "MAC Address", "Serial Number", "Barcode", "QR Code"]
           - "extractedIdentifiers": object with string or null fields {"barcode", "serialNumber", "qrCode", "modelNumber", "macAddress"}
-          - "candidates": array of 2 objects, each with exact keys:
+          - "candidates": array of up to 3 objects (include both top match and alternative raw visual matches), each with exact keys:
             - "manufacturer": string
             - "modelNumber": string
             - "displayName": string
@@ -509,7 +611,7 @@ module Discovery
         request_body = {
           "model" => model,
           "temperature" => 0.2,
-          "max_tokens" => 700,
+          "max_tokens" => 850,
           "response_format" => { "type" => "json_object" },
           "metadata" => {
             "session_id" => session_id.presence || "tuesday-server-vision"
@@ -548,6 +650,7 @@ module Discovery
 
         {
           result: parse_turn_json(raw_content, clues),
+          raw_text: raw_content,
           usage: usage,
           model: parsed["model"].presence || model
         }
@@ -565,7 +668,7 @@ module Discovery
           You are a hardware device inventory discovery assistant for Tuesday.sh (a home lab, router, switch, NAS, and IoT package/firmware telemetry platform).
           Analyze the attached hardware device photo(s) along with any user-supplied identifiers (barcode, serial number, QR code, model number, or MAC address).
           1. Extract any visible Barcode, Serial Number, QR Code payload, Model Number, or MAC Address from the photo(s) or user clues.
-          2. Rank 2 candidate hardware devices (manufacturer, modelNumber, displayName, deviceCategory, confidencePercent 1-99, reasoning, suggestedHostname, suggestedOsDetails, suggestedPackageManager from [apt, apk, brew, yum, docker, hacs, firmware]).
+          2. Rank up to 3 candidate hardware devices (including alternative raw visual matches even if lower confidence; fields: manufacturer, modelNumber, displayName, deviceCategory, confidencePercent 1-99, reasoning, suggestedHostname, suggestedOsDetails, suggestedPackageManager from [apt, apk, brew, yum, docker, hacs, firmware]).
           3. Formulate a concise `nextNarrowingQuestion` asking the user if there is a Barcode, Serial Number, QR Code, Model, or MAC Address on the device/sticker that can disambiguate the top candidates.
           </instructions>
           <accumulated_clues>
@@ -648,6 +751,7 @@ module Discovery
 
         {
           result: parse_turn_json(text_output, clues),
+          raw_text: text_output,
           usage: usage,
           model: model
         }
@@ -769,6 +873,17 @@ module Discovery
               "suggestedHostname" => "unifi-ucg-ultra",
               "suggestedOsDetails" => "UniFi OS 4.0.20 (Debian 12 apt)",
               "suggestedPackageManager" => "apt"
+            },
+            {
+              "manufacturer" => "GL.iNet",
+              "modelNumber" => "GL-MT3000",
+              "displayName" => "GL.iNet Beryl AX (GL-MT3000)",
+              "deviceCategory" => "OpenWrt Travel / Edge Router",
+              "confidencePercent" => has_clue ? 18 : 34,
+              "reasoning" => "Alternative compact white rounded-rectangle Wi-Fi 6 router chassis.",
+              "suggestedHostname" => "gl-mt3000.local",
+              "suggestedOsDetails" => "OpenWrt 23.05 (opkg firmware)",
+              "suggestedPackageManager" => "firmware"
             }
           ],
           "vendor" => "Ubiquiti Inc.",
@@ -778,16 +893,238 @@ module Discovery
         }
       end
 
-      def load_confirmed_catalog
-        return [] unless File.exist?(CONFIRMED_CATALOG_FILE)
+      def infer_candidate_purl(vendor:, model:, os_details: "")
+        v_down = vendor.to_s.downcase
+        m_down = model.to_s.downcase
+        os_down = os_details.to_s.downcase
+        m_slug = m_down.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "").presence || "device"
+        v_slug = v_down.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "").presence || "generic"
+        has_specific_model = !%w[device unknown unknown-model unidentified-hardware].include?(m_slug)
 
-        JSON.parse(File.read(CONFIRMED_CATALOG_FILE))
+        if v_down.include?("ubiquiti") || v_down.include?("unifi") || m_down.match?(/\b(udm|ucg|uxg|usw|u6|u7)\b/)
+          if has_specific_model
+            "pkg:generic/ui/#{m_slug}"
+          else
+            "pkg:generic/ui/unifi-os"
+          end
+        elsif v_down.include?("netgear") || m_down.include?("r7000") || m_down.include?("nighthawk")
+          "pkg:generic/netgear/#{m_slug}"
+        elsif v_down.include?("synology") || os_down.include?("dsm")
+          has_specific_model ? "pkg:generic/synology/#{m_slug}" : "pkg:generic/synology/dsm"
+        elsif v_down.include?("cisco")
+          has_specific_model ? "pkg:generic/cisco/#{m_slug}" : "pkg:generic/cisco/ios-xe"
+        elsif v_down.include?("ecobee")
+          "pkg:generic/ecobee/#{m_slug}"
+        elsif v_down.include?("owlet")
+          "pkg:generic/owlet/#{m_slug}"
+        elsif v_down.include?("lg") || os_down.include?("webos")
+          "pkg:generic/lg/webos"
+        elsif v_down.include?("esphome") || os_down.include?("esphome")
+          "pkg:generic/esphome/firmware"
+        elsif v_down.include?("limetech") || v_down.include?("unraid") || os_down.include?("unraid")
+          "pkg:generic/limetech/unraid"
+        elsif v_down.include?("proxmox") || os_down.include?("proxmox")
+          "pkg:deb/debian/proxmox-ve"
+        elsif v_down.include?("apple") || os_down.include?("macos")
+          "pkg:generic/apple/macos"
+        elsif v_down.include?("nintendo")
+          "pkg:generic/nintendo/horizon-os"
+        else
+          "pkg:generic/#{v_slug}/#{m_slug}"
+        end
+      end
+
+      def load_gold_feeds_raw
+        lake_dir = Bulletins::GoldSnapshotLoader.resolve_lake_dir
+        path = File.join(lake_dir, "canonical_feeds.json")
+        return [] unless File.exist?(path)
+
+        JSON.parse(File.read(path))
+      rescue StandardError
+        []
+      end
+
+      def load_gold_releases_raw
+        lake_dir = Bulletins::GoldSnapshotLoader.resolve_lake_dir
+        path = File.join(lake_dir, "catalog_releases.json")
+        return [] unless File.exist?(path)
+
+        JSON.parse(File.read(path))
+      rescue StandardError
+        []
+      end
+
+      def audit_candidates_against_gold_datalake(candidates, trace: nil)
+        feeds = load_gold_feeds_raw
+        releases = load_gold_releases_raw
+        confirmed_entries = load_confirmed_catalog
+
+        Array(candidates).map.with_index(1) do |cand, idx|
+          vendor = cand["manufacturer"].to_s
+          model = cand["modelNumber"].to_s
+          os_details = cand["suggestedOsDetails"].to_s
+          inferred_purl = infer_candidate_purl(vendor: vendor, model: model, os_details: os_details)
+
+          matched_feed = feeds.find do |f|
+            Array(f["purl_prefixes"]).any? do |prefix|
+              p_str = prefix.to_s
+              inferred_purl.start_with?(p_str) || p_str.start_with?(inferred_purl.split("/")[0..2].join("/"))
+            end
+          end
+
+          exact_release = releases.find do |r|
+            inferred_purl == r["purl_base"].to_s || inferred_purl.start_with?("#{r['purl_base']}/")
+          end
+
+          feed_release = exact_release || releases.find do |r|
+            matched_feed && r["canonical_feed_slug"] == matched_feed["slug"]
+          end
+
+          in_builtin = BUILT_IN_CATALOG_SIGNATURES.any? do |sig|
+            "#{vendor} #{model} #{cand['displayName']}".match?(sig[:pattern])
+          end
+
+          in_confirmed = confirmed_entries.any? do |entry|
+            entry_model = entry["model"].to_s.strip
+            next false if entry_model.empty?
+
+            entry_model.casecmp?(model) ||
+              (entry["vendor"].to_s.casecmp?(vendor) && model.downcase.include?(entry_model.downcase))
+          end
+
+          exact_model_aligned = in_builtin || in_confirmed || !exact_release.nil?
+          vendor_feed_only = !exact_model_aligned && !matched_feed.nil?
+          aligned = exact_model_aligned
+
+          matched_prefix = if matched_feed
+                             Array(matched_feed["purl_prefixes"]).find do |p|
+                               inferred_purl.start_with?(p.to_s) || p.to_s.start_with?(inferred_purl.split("/")[0..2].join("/"))
+                             end
+                           end
+
+          trace&.call(
+            "PURL_RESOLVE",
+            "Candidate ##{idx}: \"#{vendor}\" + \"#{model}\" (OS: \"#{os_details}\") -> #{inferred_purl} " \
+            "[builtIn=#{in_builtin}, confirmed=#{in_confirmed}, exactRelease=#{!exact_release.nil?}, vendorFeed=#{matched_feed ? matched_feed['slug'] : 'NONE'}]"
+          )
+
+          status_label = if aligned
+                           "GOLD ALIGNED"
+                         elsif vendor_feed_only
+                           "UNALIGNED MODEL (VENDOR FEED ONLY)"
+                         else
+                           "UNALIGNED RAW MATCH"
+                         end
+
+          note_parts = []
+          note_parts << "Built-in Catalog Signature" if in_builtin
+          note_parts << "Confirmed Hardware Identifier" if in_confirmed
+          note_parts << "Exact Release PURL (#{exact_release['purl_base']})" if exact_release
+          note_parts << "Feed: #{matched_feed['slug']} (#{matched_prefix})" if matched_feed
+          note_parts << "Gold Release: v#{feed_release['version']}" if feed_release
+
+          diagnostic_note = if aligned
+                              "Exact model in Gold Catalog [#{note_parts.join(' • ')}]"
+                            elsif vendor_feed_only
+                              "Model '#{model}' (#{inferred_purl}) is NOT in Gold Hardware Catalog; only vendor prefix #{matched_prefix} matched feed #{matched_feed['slug']}"
+                            else
+                              "Raw LLM candidate '#{vendor} #{model}' (#{inferred_purl}) has no matching model or vendor PURL prefix in Gold Datalake"
+                            end
+
+          alignment = {
+            "aligned" => aligned,
+            "vendorFeedOnly" => vendor_feed_only,
+            "matchedFeedSlug" => matched_feed && matched_feed["slug"],
+            "matchedFeedName" => matched_feed && matched_feed["pro_name"],
+            "matchedPurlPrefix" => matched_prefix,
+            "inferredPurl" => inferred_purl,
+            "latestGoldRelease" => feed_release && feed_release["version"],
+            "inBuiltInCatalog" => in_builtin,
+            "inConfirmedCatalog" => in_confirmed,
+            "statusLabel" => status_label,
+            "diagnosticNote" => diagnostic_note
+          }
+
+          trace&.call(
+            "GOLD_AUDIT",
+            "Candidate ##{idx}: #{vendor} #{model} (#{cand['confidencePercent']}%) -> #{alignment['statusLabel']} | #{diagnostic_note}"
+          )
+
+          cand.merge("goldAlignment" => alignment)
+        end
+      end
+
+      def format_debug_log_text(
+        session_id:,
+        turn_index:,
+        client_platform:,
+        provider_used:,
+        model_used:,
+        latency_ms:,
+        cost_usd:,
+        usage:,
+        visual_summary:,
+        extracted_identifiers:,
+        candidates:,
+        raw_llm_response:,
+        debug_trace:
+      )
+        lines = []
+        lines << "=== TUESDAY VISION DEBUG LOG [#{Time.now.utc.strftime('%H:%M:%S.%L UTC')}] ==="
+        lines << "Session: #{session_id} (Turn ##{turn_index} • #{client_platform})"
+        lines << "Provider: #{provider_used} • Model: #{model_used} • Latency: #{latency_ms}ms • Cost: $#{format('%.6f', cost_usd.to_f)}"
+        lines << "Tokens: in=#{usage[:input_tokens]} out=#{usage[:output_tokens]} cached=#{usage[:cache_read_tokens]}"
+        lines << "Visual Summary: #{visual_summary}"
+        lines << "Extracted Identifiers: #{JSON.generate(extracted_identifiers)}"
+        lines << ""
+        lines << "--- PIPELINE TRACE ---"
+        Array(debug_trace).each { |t| lines << t }
+        lines << ""
+        lines << "--- CANDIDATES & GOLD DATALAKE ALIGNMENT (#{Array(candidates).size}) ---"
+        Array(candidates).each_with_index do |c, idx|
+          ga = c["goldAlignment"] || {}
+          badge = if ga["aligned"]
+                    "[✓ GOLD ALIGNED]"
+                  elsif ga["vendorFeedOnly"]
+                    "[⚠ VENDOR FEED ONLY]"
+                  else
+                    "[⚠ UNALIGNED RAW]"
+                  end
+          lines << "  #{idx + 1}. #{badge} #{c['manufacturer']} #{c['modelNumber']} (#{c['confidencePercent']}%)"
+          lines << "     Display: #{c['displayName']} | Category: #{c['deviceCategory']} | Pkg: #{c['suggestedPackageManager']}"
+          lines << "     PURL: #{ga['inferredPurl']} | Feed: #{ga['matchedFeedSlug'] || 'NONE'} | Gold Rel: #{ga['latestGoldRelease'] || 'NONE'}"
+          lines << "     Reason: #{c['reasoning']}"
+          lines << "     Audit: #{ga['diagnosticNote']}"
+        end
+        if raw_llm_response && !raw_llm_response.to_s.strip.empty?
+          lines << ""
+          lines << "--- RAW UPSTREAM LLM JSON ---"
+          lines << raw_llm_response.to_s.strip
+        end
+        lines.join("\n")
+      end
+
+      def confirmed_catalog_path
+        return CONFIRMED_CATALOG_FILE if File.directory?(File.dirname(CONFIRMED_CATALOG_FILE))
+
+        bundled = File.join(Bulletins::GoldSnapshotLoader.resolve_lake_dir, "confirmed_hardware_identifiers.json")
+        return bundled if File.exist?(bundled)
+
+        "/tmp/tuesday-datalake/gold/confirmed_hardware_identifiers.json"
+      end
+
+      def load_confirmed_catalog
+        path = confirmed_catalog_path
+        return [] unless File.exist?(path)
+
+        JSON.parse(File.read(path))
       rescue StandardError
         []
       end
 
       def promote_confirmed_identifiers(identifiers:, vendor:, model:, lifecycle_tier:, trust_zone:)
-        FileUtils.mkdir_p(File.dirname(CONFIRMED_CATALOG_FILE))
+        target_path = File.directory?(File.dirname(CONFIRMED_CATALOG_FILE)) ? CONFIRMED_CATALOG_FILE : "/tmp/tuesday-datalake/gold/confirmed_hardware_identifiers.json"
+        FileUtils.mkdir_p(File.dirname(target_path))
         entries = load_confirmed_catalog
         identifiers.each do |raw_id|
           cleaned = raw_id.to_s.strip
@@ -811,7 +1148,7 @@ module Discovery
             }
           end
         end
-        File.write(CONFIRMED_CATALOG_FILE, JSON.pretty_generate(entries))
+        File.write(target_path, JSON.pretty_generate(entries))
       rescue StandardError => e
         Rails.logger.warn("[Discovery::HardwareVisionService] Confirmed catalog update skipped: #{e.message}")
       end
