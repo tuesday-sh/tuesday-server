@@ -437,33 +437,80 @@ module Discovery
         )
       end
 
+      CATEGORY_CODE_LABELS = {
+        "C1" => "C1 • Power / UPS",
+        "C2" => "C2 • WAN / Modem",
+        "C3" => "C3 • Gateway / Router",
+        "C4" => "C4 • Core Switch",
+        "C5" => "C5 • Patch Panel",
+        "C6" => "C6 • Compute / NAS",
+        "C7" => "C7 • Wireless AP",
+        "C8" => "C8 • IoT / Hub / Misc"
+      }.freeze
+
       def match_catalog_short_circuit(normalized_clues)
         flat_list = normalized_clues[:flat_list]
         return nil if flat_list.empty?
 
         joined = flat_list.join(" | ")
+        idx = confirmed_catalog_index
 
-        # 1. Check user-confirmed identifier catalog first
-        load_confirmed_catalog.each do |entry|
-          token = entry["identifier"].to_s.strip
-          next if token.length < 4
+        # 1a. Exact Barcode / UPC / GTIN O(1) lookup against 7,122+ Gold Catalog SKUs
+        barcode_candidates = []
+        barcode_candidates << normalized_clues.dig(:object, "barcode").to_s.gsub(/[^0-9]/, "")
+        flat_list.each do |item|
+          item.to_s.scan(/\b(\d{8,14})\b/).flatten.each { |digits| barcode_candidates << digits }
+        end
+        barcode_candidates.reject(&:empty?).uniq.each do |upc|
+          entry = idx[:by_upc][upc]
+          next unless entry
 
-          if flat_list.any? { |id| id.casecmp?(token) || id.downcase.include?(token.downcase) }
-            return build_catalog_turn_payload(
-              vendor: entry["vendor"],
-              model: entry["model"],
-              display_name: "#{entry['vendor']} #{entry['model']}",
-              category: "Verified Network / IoT Hardware",
-              hostname: entry["model"].to_s.downcase.gsub(/[^a-z0-9]+/, "-"),
-              os_details: "Verified Tuesday Catalog Device",
-              pkg_manager: "firmware",
-              confidence_pct: 98,
-              reasoning: "Matched verified hardware identifier (#{token}) in Gold Confirmed Catalog ($0.00 short-circuit).",
-              lifecycle_tier: entry["lifecycle_tier"] || "active",
-              trust_zone: entry["trust_zone"] || "z1_trusted",
-              clues: normalized_clues
-            )
-          end
+          cat_label = CATEGORY_CODE_LABELS[entry["category_code"]] || "Verified Network / IoT Hardware"
+          model_display = entry["model"].to_s.upcase
+          return build_catalog_turn_payload(
+            vendor: entry["vendor"],
+            model: model_display,
+            display_name: "#{entry['brand'] || entry['vendor']} #{model_display}",
+            category: cat_label,
+            hostname: "#{entry['vendor'].to_s.downcase.gsub(/[^a-z0-9]+/, '-')}-#{entry['model'].to_s.downcase.gsub(/[^a-z0-9]+/, '-')}",
+            os_details: "Verified Tuesday Gold Catalog SKU (#{entry['canonical_purl']})",
+            pkg_manager: "firmware",
+            confidence_pct: 99,
+            reasoning: "Matched exact UPC/GTIN barcode (#{upc}) to #{entry['vendor']} #{model_display} in Gold Hardware Catalog (0 LLM turns).",
+            lifecycle_tier: entry["lifecycle_tier"] || "active",
+            trust_zone: entry["trust_zone"] || "z1_trusted",
+            clues: normalized_clues
+          )
+        end
+
+        # 1b. Exact user-confirmed identifier lookup
+        token_candidates = []
+        token_candidates << normalized_clues.dig(:object, "modelNumber").to_s.strip
+        flat_list.each do |raw|
+          cleaned = raw.to_s.sub(/\A(Barcode|Serial(\s*Number)?|QR(\s*Code)?|Model(\s*Number)?|MAC(\s*Address)?|Clue):\s*/i, "").strip
+          token_candidates << cleaned
+        end
+
+        token_candidates.reject { |t| t.length < 4 }.uniq.each do |token|
+          entry = idx[:by_identifier][token.downcase]
+          next unless entry
+
+          cat_label = CATEGORY_CODE_LABELS[entry["category_code"]] || "Verified Network / IoT Hardware"
+          model_display = entry["model"].to_s
+          return build_catalog_turn_payload(
+            vendor: entry["vendor"],
+            model: model_display,
+            display_name: "#{entry['brand'] || entry['vendor']} #{model_display}",
+            category: cat_label,
+            hostname: entry["model"].to_s.downcase.gsub(/[^a-z0-9]+/, "-"),
+            os_details: "Verified Tuesday Gold Catalog Device (#{entry['canonical_purl']})",
+            pkg_manager: "firmware",
+            confidence_pct: 98,
+            reasoning: "Matched verified hardware identifier (#{token}) in Gold Confirmed Catalog (0 LLM turns).",
+            lifecycle_tier: entry["lifecycle_tier"] || "active",
+            trust_zone: entry["trust_zone"] || "z1_trusted",
+            clues: normalized_clues
+          )
         end
 
         # 2. Check built-in Gold Catalog hardware patterns
@@ -484,6 +531,32 @@ module Discovery
               clues: normalized_clues
             )
           end
+        end
+
+        # 3. Check 7,161+ Gold Catalog SKU model_slug index
+        token_candidates.reject { |t| t.length < 4 }.uniq.each do |token|
+          slug = token.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
+          next if slug.length < 4
+
+          entry = idx[:by_model_slug][slug]
+          next unless entry
+
+          cat_label = CATEGORY_CODE_LABELS[entry["category_code"]] || "Verified Network / IoT Hardware"
+          model_display = entry["model"].to_s
+          return build_catalog_turn_payload(
+            vendor: entry["vendor"],
+            model: model_display,
+            display_name: "#{entry['brand'] || entry['vendor']} #{model_display}",
+            category: cat_label,
+            hostname: entry["model"].to_s.downcase.gsub(/[^a-z0-9]+/, "-"),
+            os_details: "Verified Tuesday Gold Catalog Device (#{entry['canonical_purl']})",
+            pkg_manager: "firmware",
+            confidence_pct: 98,
+            reasoning: "Matched verified hardware identifier (#{token}) in Gold Confirmed Catalog (0 LLM turns).",
+            lifecycle_tier: entry["lifecycle_tier"] || "active",
+            trust_zone: entry["trust_zone"] || "z1_trusted",
+            clues: normalized_clues
+          )
         end
 
         nil
@@ -957,13 +1030,16 @@ module Discovery
       def audit_candidates_against_gold_datalake(candidates, trace: nil)
         feeds = load_gold_feeds_raw
         releases = load_gold_releases_raw
-        confirmed_entries = load_confirmed_catalog
+        idx_map = confirmed_catalog_index
+        confirmed_entries = idx_map[:entries]
 
         Array(candidates).map.with_index(1) do |cand, idx|
           vendor = cand["manufacturer"].to_s
           model = cand["modelNumber"].to_s
           os_details = cand["suggestedOsDetails"].to_s
           inferred_purl = infer_candidate_purl(vendor: vendor, model: model, os_details: os_details)
+          model_slug = model.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
+          vendor_slug = vendor.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
 
           matched_feed = feeds.find do |f|
             Array(f["purl_prefixes"]).any? do |prefix|
@@ -984,12 +1060,13 @@ module Discovery
             "#{vendor} #{model} #{cand['displayName']}".match?(sig[:pattern])
           end
 
-          in_confirmed = confirmed_entries.any? do |entry|
-            entry_model = entry["model"].to_s.strip
-            next false if entry_model.empty?
-
-            entry_model.casecmp?(model) ||
-              (entry["vendor"].to_s.casecmp?(vendor) && model.downcase.include?(entry_model.downcase))
+          base_model_slug = model_slug.sub(/-(100nas|200nas|us|eu|uk|au|ca|v\d+)\z/, "")
+          matched_confirmed = idx_map[:by_purl][inferred_purl.downcase] ||
+                              (model_slug.length >= 3 && idx_map[:by_model_slug][model_slug]) ||
+                              (base_model_slug.length >= 3 && idx_map[:by_model_slug][base_model_slug])
+          in_confirmed = !matched_confirmed.nil?
+          if matched_confirmed && matched_confirmed["canonical_purl"].present? && matched_feed.nil?
+            inferred_purl = matched_confirmed["canonical_purl"]
           end
 
           exact_model_aligned = in_builtin || in_confirmed || !exact_release.nil?
@@ -1018,7 +1095,11 @@ module Discovery
 
           note_parts = []
           note_parts << "Built-in Catalog Signature" if in_builtin
-          note_parts << "Confirmed Hardware Identifier" if in_confirmed
+          if matched_confirmed
+            cat_c = matched_confirmed["category_code"]
+            upc_c = matched_confirmed["upc_gtin"]
+            note_parts << "Gold Catalog SKU (#{cat_c || 'Verified'}#{upc_c ? " • UPC #{upc_c}" : ''})"
+          end
           note_parts << "Exact Release PURL (#{exact_release['purl_base']})" if exact_release
           note_parts << "Feed: #{matched_feed['slug']} (#{matched_prefix})" if matched_feed
           note_parts << "Gold Release: v#{feed_release['version']}" if feed_release
@@ -1041,6 +1122,8 @@ module Discovery
             "latestGoldRelease" => feed_release && feed_release["version"],
             "inBuiltInCatalog" => in_builtin,
             "inConfirmedCatalog" => in_confirmed,
+            "categoryCode" => matched_confirmed && matched_confirmed["category_code"],
+            "upcGtin" => matched_confirmed && matched_confirmed["upc_gtin"],
             "statusLabel" => status_label,
             "diagnosticNote" => diagnostic_note
           }
@@ -1072,7 +1155,7 @@ module Discovery
         lines = []
         lines << "=== TUESDAY VISION DEBUG LOG [#{Time.now.utc.strftime('%H:%M:%S.%L UTC')}] ==="
         lines << "Session: #{session_id} (Turn ##{turn_index} • #{client_platform})"
-        lines << "Provider: #{provider_used} • Model: #{model_used} • Latency: #{latency_ms}ms • Cost: $#{format('%.6f', cost_usd.to_f)}"
+        lines << "Provider: #{provider_used} • Model: #{model_used} • Latency: #{latency_ms}ms"
         lines << "Tokens: in=#{usage[:input_tokens]} out=#{usage[:output_tokens]} cached=#{usage[:cache_read_tokens]}"
         lines << "Visual Summary: #{visual_summary}"
         lines << "Extracted Identifiers: #{JSON.generate(extracted_identifiers)}"
@@ -1105,7 +1188,7 @@ module Discovery
       end
 
       def confirmed_catalog_path
-        return CONFIRMED_CATALOG_FILE if File.directory?(File.dirname(CONFIRMED_CATALOG_FILE))
+        return CONFIRMED_CATALOG_FILE if File.exist?(CONFIRMED_CATALOG_FILE)
 
         bundled = File.join(Bulletins::GoldSnapshotLoader.resolve_lake_dir, "confirmed_hardware_identifiers.json")
         return bundled if File.exist?(bundled)
@@ -1117,15 +1200,57 @@ module Discovery
         path = confirmed_catalog_path
         return [] unless File.exist?(path)
 
-        JSON.parse(File.read(path))
+        mtime = File.mtime(path).to_f
+        if @cached_catalog_mtime == mtime && @cached_catalog_entries
+          return @cached_catalog_entries
+        end
+
+        parsed = JSON.parse(File.read(path))
+        entries = parsed.is_a?(Hash) ? Array(parsed["identifiers"]) : Array(parsed)
+        @cached_catalog_mtime = mtime
+        @cached_catalog_entries = entries
+        @cached_catalog_index = nil
+        entries
       rescue StandardError
         []
+      end
+
+      def confirmed_catalog_index
+        entries = load_confirmed_catalog
+        return @cached_catalog_index if @cached_catalog_index
+
+        by_upc = {}
+        by_identifier = {}
+        by_purl = {}
+        by_model_slug = {}
+
+        entries.each do |e|
+          upc = e["upc_gtin"].to_s.gsub(/[^0-9]/, "")
+          by_upc[upc] = e if upc.length >= 8
+
+          ident = e["identifier"].to_s.strip.downcase
+          by_identifier[ident] = e if ident.length >= 4
+
+          purl = e["canonical_purl"].to_s.strip.downcase
+          by_purl[purl] = e unless purl.empty?
+
+          m_slug = e["model"].to_s.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
+          by_model_slug[m_slug] ||= e if m_slug.length >= 3
+        end
+
+        @cached_catalog_index = {
+          entries: entries,
+          by_upc: by_upc,
+          by_identifier: by_identifier,
+          by_purl: by_purl,
+          by_model_slug: by_model_slug
+        }
       end
 
       def promote_confirmed_identifiers(identifiers:, vendor:, model:, lifecycle_tier:, trust_zone:)
         target_path = File.directory?(File.dirname(CONFIRMED_CATALOG_FILE)) ? CONFIRMED_CATALOG_FILE : "/tmp/tuesday-datalake/gold/confirmed_hardware_identifiers.json"
         FileUtils.mkdir_p(File.dirname(target_path))
-        entries = load_confirmed_catalog
+        entries = load_confirmed_catalog.dup
         identifiers.each do |raw_id|
           cleaned = raw_id.to_s.strip
           next if cleaned.length < 4
@@ -1138,17 +1263,31 @@ module Discovery
             existing["trust_zone"] = trust_zone
             existing["updated_at"] = Time.now.utc.iso8601
           else
+            v_slug = vendor.to_s.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
+            m_slug = model.to_s.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
             entries << {
               "identifier" => cleaned,
               "vendor" => vendor,
+              "brand" => vendor,
               "model" => model,
+              "canonical_purl" => "pkg:generic/#{v_slug}/#{m_slug}",
+              "category_code" => "C8",
+              "upc_gtin" => cleaned.match?(/\A\d{8,14}\z/) ? cleaned : nil,
+              "match_tier" => "USER_CONFIRMED",
               "lifecycle_tier" => lifecycle_tier,
               "trust_zone" => trust_zone,
               "updated_at" => Time.now.utc.iso8601
             }
           end
         end
-        File.write(target_path, JSON.pretty_generate(entries))
+        payload = {
+          "updated_at" => Time.now.utc.iso8601,
+          "total_matchable_products" => entries.size,
+          "identifiers" => entries
+        }
+        File.write(target_path, JSON.pretty_generate(payload))
+        @cached_catalog_mtime = nil
+        @cached_catalog_index = nil
       rescue StandardError => e
         Rails.logger.warn("[Discovery::HardwareVisionService] Confirmed catalog update skipped: #{e.message}")
       end

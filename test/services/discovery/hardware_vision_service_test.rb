@@ -185,12 +185,12 @@ class HardwareVisionServiceTest < Minitest::Test
       },
       {
         "manufacturer" => "Ubiquiti",
-        "modelNumber" => "UCG-Max",
-        "displayName" => "UniFi Cloud Gateway Max",
+        "modelNumber" => "UXG-Prototype-999",
+        "displayName" => "UniFi Gateway Prototype 999",
         "deviceCategory" => "Gateway / Router",
         "confidencePercent" => 5,
         "reasoning" => "Similar white desktop enclosure.",
-        "suggestedHostname" => "ucg-max",
+        "suggestedHostname" => "uxg-proto-999",
         "suggestedOsDetails" => "UniFi OS",
         "suggestedPackageManager" => "firmware"
       },
@@ -222,9 +222,9 @@ class HardwareVisionServiceTest < Minitest::Test
     assert_equal "GOLD ALIGNED", c1["statusLabel"]
     assert_equal "ubiquiti-advisories", c1["matchedFeedSlug"]
 
-    # 2. UCG-Max -> Same vendor prefix (pkg:generic/ui/), but model not in Gold Catalog
+    # 2. UXG-Prototype-999 -> Same vendor prefix (pkg:generic/ui/), but model not in Gold Catalog
     c2 = audited[1]["goldAlignment"]
-    assert_equal "pkg:generic/ui/ucg-max", c2["inferredPurl"]
+    assert_equal "pkg:generic/ui/uxg-prototype-999", c2["inferredPurl"]
     assert_equal false, c2["aligned"]
     assert_equal true, c2["vendorFeedOnly"]
     assert_equal "UNALIGNED MODEL (VENDOR FEED ONLY)", c2["statusLabel"]
