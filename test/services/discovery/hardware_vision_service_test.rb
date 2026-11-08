@@ -195,13 +195,13 @@ class HardwareVisionServiceTest < Minitest::Test
         "suggestedPackageManager" => "firmware"
       },
       {
-        "manufacturer" => "GL.iNet",
-        "modelNumber" => "GL-MT3000",
-        "displayName" => "GL.iNet Beryl AX",
+        "manufacturer" => "AcmeNet",
+        "modelNumber" => "AR-9999",
+        "displayName" => "AcmeNet Prototype Router",
         "deviceCategory" => "Router",
         "confidencePercent" => 2,
         "reasoning" => "Compact white router.",
-        "suggestedHostname" => "gl-mt3000",
+        "suggestedHostname" => "acmenet-ar9999",
         "suggestedOsDetails" => "OpenWrt",
         "suggestedPackageManager" => "firmware"
       }
@@ -230,14 +230,38 @@ class HardwareVisionServiceTest < Minitest::Test
     assert_equal "UNALIGNED MODEL (VENDOR FEED ONLY)", c2["statusLabel"]
     assert_equal "ubiquiti-advisories", c2["matchedFeedSlug"]
 
-    # 3. GL-MT3000 -> Neither model nor vendor prefix in Gold Catalog
+    # 3. AcmeNet AR-9999 -> Neither model nor vendor prefix in Gold Catalog
     c3 = audited[2]["goldAlignment"]
-    assert_equal "pkg:generic/gl-inet/gl-mt3000", c3["inferredPurl"]
+    assert_equal "pkg:generic/acmenet/ar-9999", c3["inferredPurl"]
     assert_equal false, c3["aligned"]
     assert_equal false, c3["vendorFeedOnly"]
     assert_equal "UNALIGNED RAW MATCH", c3["statusLabel"]
     assert_nil c3["matchedFeedSlug"]
 
     assert_equal 6, traces.size # 3 PURL_RESOLVE + 3 GOLD_AUDIT
+  end
+
+  def test_fcc_id_short_circuit_and_modular_radio_disambiguation
+    # 1. Host FCC ID (Netgear CAX80 -> PY320100492) resolves in 0 LLM turns
+    res_host = Discovery::HardwareVisionService.analyze(
+      session_id: "test-fcc-host",
+      extracted_identifiers: ["FCC ID: PY320100492"],
+      debug: false
+    )
+    assert_equal true, res_host["shortCircuited"]
+    assert_equal "Netgear", res_host["vendor"]
+    assert_equal "CAX80", res_host["model"]
+    assert_equal "PY320100492", res_host.dig("extractedIdentifiersObject", "fccId")
+    assert_equal "GOLD ALIGNED", res_host.dig("candidates", 0, "goldAlignment", "statusLabel")
+
+    # 2. Modular Radio FCC ID ("Contains FCC ID: 2AC7Z-ESP32WROOM32E") does NOT misidentify outer vendor as Espressif
+    res_mod = Discovery::HardwareVisionService.analyze(
+      session_id: "test-fcc-module",
+      provider_override: "heuristic",
+      extracted_identifiers: ["Contains FCC ID: 2AC7Z-ESP32WROOM32E"],
+      debug: false
+    )
+    assert_equal false, res_mod["shortCircuited"]
+    assert res_mod["extractedIdentifiers"].any? { |c| c.include?("Embedded Radio Module") && c.include?("ESP32") }
   end
 end

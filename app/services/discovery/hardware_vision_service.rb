@@ -483,11 +483,62 @@ module Discovery
           )
         end
 
-        # 1b. Exact user-confirmed identifier lookup
+        # 1b. FCC OET Regulatory ID & Grantee Prefix O(1) Lookup (0 LLM turns)
+        fcc_candidates = []
+        fcc_candidates << normalized_clues.dig(:object, "fccId").to_s.strip
+        flat_list.each do |item|
+          item.to_s.scan(/\b(?:FCC\s*ID\s*[:#\-]?\s*)?([A-Z0-9]{3,5}-[A-Z0-9\-_]{2,14}|(?:SWX|PY3|MSQ|TE7|TVE|I88|KA2|Q87|WR9|BCG|A3L|NKR|BEJ|LDK|UID|IHD|SBV|JPZ)[A-Z0-9]{4,14})\b/i).flatten.each do |fid|
+            fcc_candidates << fid
+          end
+        end
+        contains_modular_hint = joined.match?(/\bcontains\s+fcc\s*id\b/i)
+
+        fcc_candidates.reject(&:empty?).uniq.each do |raw_fcc|
+          norm_fcc = raw_fcc.upcase.gsub(/[^A-Z0-9]/, "")
+          next if norm_fcc.length < 5
+
+          grantee_prefix = idx[:fcc_grantees].keys.find { |g| norm_fcc.start_with?(g) }
+          grantee_info = grantee_prefix && idx[:fcc_grantees][grantee_prefix]
+
+          # If this is an embedded radio SoC module ("Contains FCC ID:" or RADIO_MODULE grantee like 2AC7Z Espressif),
+          # enrich the clues with the exact radio module architecture rather than mistaking the chip vendor for the outer chassis brand.
+          if grantee_info && (grantee_info["type"] == "RADIO_MODULE" || contains_modular_hint)
+            module_note = "Embedded Radio Module (FCC #{raw_fcc.upcase}): #{grantee_info['notes']}"
+            normalized_clues[:flat_list] << module_note unless normalized_clues[:flat_list].include?(module_note)
+            next
+          end
+
+          entry = idx[:by_fcc_id][norm_fcc]
+          if entry.nil? && grantee_prefix && grantee_info && grantee_info["type"] == "HOST_DEVICE"
+            prod_suffix = norm_fcc.sub(/\A#{Regexp.escape(grantee_prefix)}/, "").downcase
+            entry = idx[:by_model_slug][prod_suffix] if prod_suffix.length >= 3
+          end
+          next unless entry
+
+          normalized_clues[:object]["fccId"] ||= entry["fcc_id"] || raw_fcc.upcase
+          cat_label = CATEGORY_CODE_LABELS[entry["category_code"]] || "Verified Network / IoT Hardware"
+          model_display = entry["model"].to_s.upcase
+          return build_catalog_turn_payload(
+            vendor: entry["vendor"],
+            model: model_display,
+            display_name: "#{entry['brand'] || entry['vendor']} #{model_display}",
+            category: cat_label,
+            hostname: "#{entry['vendor'].to_s.downcase.gsub(/[^a-z0-9]+/, '-')}-#{entry['model'].to_s.downcase.gsub(/[^a-z0-9]+/, '-')}",
+            os_details: "Verified Tuesday Gold Catalog FCC Grant (#{entry['fcc_id'] || raw_fcc.upcase} • #{entry['canonical_purl']})",
+            pkg_manager: "firmware",
+            confidence_pct: 99,
+            reasoning: "Matched FCC OET Equipment Grant (#{entry['fcc_id'] || raw_fcc.upcase}) to #{entry['vendor']} #{model_display} in Gold Hardware Catalog (0 LLM turns).",
+            lifecycle_tier: entry["lifecycle_tier"] || "active",
+            trust_zone: entry["trust_zone"] || "z1_trusted",
+            clues: normalized_clues
+          )
+        end
+
+        # 1c. Exact user-confirmed identifier lookup
         token_candidates = []
         token_candidates << normalized_clues.dig(:object, "modelNumber").to_s.strip
         flat_list.each do |raw|
-          cleaned = raw.to_s.sub(/\A(Barcode|Serial(\s*Number)?|QR(\s*Code)?|Model(\s*Number)?|MAC(\s*Address)?|Clue):\s*/i, "").strip
+          cleaned = raw.to_s.sub(/\A(Barcode|FCC(\s*ID)?|Serial(\s*Number)?|QR(\s*Code)?|Model(\s*Number)?|MAC(\s*Address)?|Clue):\s*/i, "").strip
           token_candidates << cleaned
         end
 
@@ -567,6 +618,7 @@ module Discovery
       def normalize_incoming_clues(extracted_identifiers, user_clue_notes)
         obj = {
           "barcode" => nil,
+          "fccId" => nil,
           "serialNumber" => nil,
           "qrCode" => nil,
           "modelNumber" => nil,
@@ -577,6 +629,7 @@ module Discovery
         if extracted_identifiers.is_a?(Hash) || (defined?(ActionController::Parameters) && extracted_identifiers.is_a?(ActionController::Parameters))
           h = extracted_identifiers.respond_to?(:to_unsafe_h) ? extracted_identifiers.to_unsafe_h : extracted_identifiers
           obj["barcode"] = h["barcode"].presence
+          obj["fccId"] = h["fccId"].presence || h["fcc_id"].presence
           obj["serialNumber"] = h["serialNumber"].presence || h["serial_number"].presence
           obj["qrCode"] = h["qrCode"].presence || h["qr_code"].presence
           obj["modelNumber"] = h["modelNumber"].presence || h["model_number"].presence
@@ -589,6 +642,7 @@ module Discovery
 
             flat << s
             obj["barcode"] ||= s.sub(/\ABarcode:\s*/i, "") if s.match?(/\ABarcode:/i)
+            obj["fccId"] ||= s.sub(/\A(?:Contains\s+)?FCC(\s*ID)?:\s*/i, "") if s.match?(/\A(?:Contains\s+)?FCC/i)
             obj["serialNumber"] ||= s.sub(/\ASerial(\s*Number)?:\s*/i, "") if s.match?(/\ASerial/i)
             obj["qrCode"] ||= s.sub(/\AQR(\s*Code)?:\s*/i, "") if s.match?(/\AQR/i)
             obj["modelNumber"] ||= s.sub(/\AModel(\s*Number)?:\s*/i, "") if s.match?(/\AModel/i)
@@ -598,7 +652,23 @@ module Discovery
 
         Array(user_clue_notes).each do |note|
           s = note.to_s.strip
-          flat << "Clue: #{s}" unless s.empty?
+          next if s.empty?
+
+          flat << "Clue: #{s}"
+          if obj["fccId"].nil? && (m = s.match(/\bFCC\s*ID\s*[:#\-]?\s*([A-Z0-9]{3,5}-?[A-Z0-9\-_]{2,14})\b/i))
+            obj["fccId"] = m[1]
+          end
+        end
+
+        if obj["fccId"].present?
+          norm_fcc = obj["fccId"].to_s.upcase.gsub(/[^A-Z0-9]/, "")
+          grantees = confirmed_catalog_index[:fcc_grantees] || {}
+          grantee_prefix = grantees.keys.find { |g| norm_fcc.start_with?(g) }
+          grantee_info = grantee_prefix && grantees[grantee_prefix]
+          contains_hint = flat.any? { |c| c.match?(/\bcontains\s+fcc\s*id\b/i) }
+          if grantee_info && (grantee_info["type"] == "RADIO_MODULE" || contains_hint)
+            flat << "Embedded Radio Module (FCC #{obj['fccId'].upcase}): #{grantee_info['notes']}"
+          end
         end
 
         { object: obj, flat_list: flat.uniq }
@@ -1098,7 +1168,8 @@ module Discovery
           if matched_confirmed
             cat_c = matched_confirmed["category_code"]
             upc_c = matched_confirmed["upc_gtin"]
-            note_parts << "Gold Catalog SKU (#{cat_c || 'Verified'}#{upc_c ? " • UPC #{upc_c}" : ''})"
+            fcc_c = matched_confirmed["fcc_id"]
+            note_parts << "Gold Catalog SKU (#{cat_c || 'Verified'}#{upc_c ? " • UPC #{upc_c}" : ''}#{fcc_c ? " • FCC #{fcc_c}" : ''})"
           end
           note_parts << "Exact Release PURL (#{exact_release['purl_base']})" if exact_release
           note_parts << "Feed: #{matched_feed['slug']} (#{matched_prefix})" if matched_feed
@@ -1124,6 +1195,8 @@ module Discovery
             "inConfirmedCatalog" => in_confirmed,
             "categoryCode" => matched_confirmed && matched_confirmed["category_code"],
             "upcGtin" => matched_confirmed && matched_confirmed["upc_gtin"],
+            "fccId" => matched_confirmed && matched_confirmed["fcc_id"],
+            "fccGrantee" => matched_confirmed && matched_confirmed["fcc_grantee"],
             "statusLabel" => status_label,
             "diagnosticNote" => diagnostic_note
           }
@@ -1207,6 +1280,7 @@ module Discovery
 
         parsed = JSON.parse(File.read(path))
         entries = parsed.is_a?(Hash) ? Array(parsed["identifiers"]) : Array(parsed)
+        @cached_fcc_grantees = parsed.is_a?(Hash) ? (parsed["fcc_grantees"] || {}) : {}
         @cached_catalog_mtime = mtime
         @cached_catalog_entries = entries
         @cached_catalog_index = nil
@@ -1220,6 +1294,7 @@ module Discovery
         return @cached_catalog_index if @cached_catalog_index
 
         by_upc = {}
+        by_fcc_id = {}
         by_identifier = {}
         by_purl = {}
         by_model_slug = {}
@@ -1227,6 +1302,9 @@ module Discovery
         entries.each do |e|
           upc = e["upc_gtin"].to_s.gsub(/[^0-9]/, "")
           by_upc[upc] = e if upc.length >= 8
+
+          fcc = e["fcc_id"].to_s.upcase.gsub(/[^A-Z0-9]/, "")
+          by_fcc_id[fcc] = e if fcc.length >= 5
 
           ident = e["identifier"].to_s.strip.downcase
           by_identifier[ident] = e if ident.length >= 4
@@ -1240,7 +1318,9 @@ module Discovery
 
         @cached_catalog_index = {
           entries: entries,
+          fcc_grantees: @cached_fcc_grantees || {},
           by_upc: by_upc,
+          by_fcc_id: by_fcc_id,
           by_identifier: by_identifier,
           by_purl: by_purl,
           by_model_slug: by_model_slug
