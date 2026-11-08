@@ -98,6 +98,8 @@ class HardwareVisionServiceTest < Minitest::Test
       assert_equal "Ubiquiti", scan_result["vendor"]
       assert_equal "USW-Enterprise-8-PoE", scan_result["model"]
       assert_equal 0.0, scan_result["costUSD"]
+    ensure
+      FileUtils.rm_f(Discovery::HardwareVisionService::RUNTIME_CONFIRMED_CATALOG_FILE)
     end
   end
 

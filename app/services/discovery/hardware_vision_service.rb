@@ -25,6 +25,8 @@ module Discovery
     GEMINI_INTERACTIONS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions"
 
     CONFIRMED_CATALOG_FILE = File.expand_path("../../../../../tuesday-datalake/gold/confirmed_hardware_identifiers.json", __FILE__)
+    BUNDLED_CONFIRMED_CATALOG_FILE = File.join(Bulletins::GoldSnapshotLoader::BUNDLED_LAKE_DIR, "confirmed_hardware_identifiers.json")
+    RUNTIME_CONFIRMED_CATALOG_FILE = "/tmp/tuesday-datalake/gold/confirmed_hardware_identifiers.json"
 
     PRIVACY_ATTESTATION = {
       "imageRetention" => "none_ephemeral_ram_only",
@@ -1261,12 +1263,11 @@ module Discovery
       end
 
       def confirmed_catalog_path
+        return RUNTIME_CONFIRMED_CATALOG_FILE if File.exist?(RUNTIME_CONFIRMED_CATALOG_FILE)
         return CONFIRMED_CATALOG_FILE if File.exist?(CONFIRMED_CATALOG_FILE)
+        return BUNDLED_CONFIRMED_CATALOG_FILE if File.exist?(BUNDLED_CONFIRMED_CATALOG_FILE)
 
-        bundled = File.join(Bulletins::GoldSnapshotLoader.resolve_lake_dir, "confirmed_hardware_identifiers.json")
-        return bundled if File.exist?(bundled)
-
-        "/tmp/tuesday-datalake/gold/confirmed_hardware_identifiers.json"
+        RUNTIME_CONFIRMED_CATALOG_FILE
       end
 
       def load_confirmed_catalog
@@ -1274,13 +1275,14 @@ module Discovery
         return [] unless File.exist?(path)
 
         mtime = File.mtime(path).to_f
-        if @cached_catalog_mtime == mtime && @cached_catalog_entries
+        if @cached_catalog_path == path && @cached_catalog_mtime == mtime && @cached_catalog_entries
           return @cached_catalog_entries
         end
 
         parsed = JSON.parse(File.read(path))
         entries = parsed.is_a?(Hash) ? Array(parsed["identifiers"]) : Array(parsed)
         @cached_fcc_grantees = parsed.is_a?(Hash) ? (parsed["fcc_grantees"] || {}) : {}
+        @cached_catalog_path = path
         @cached_catalog_mtime = mtime
         @cached_catalog_entries = entries
         @cached_catalog_index = nil
@@ -1328,7 +1330,11 @@ module Discovery
       end
 
       def promote_confirmed_identifiers(identifiers:, vendor:, model:, lifecycle_tier:, trust_zone:)
-        target_path = File.directory?(File.dirname(CONFIRMED_CATALOG_FILE)) ? CONFIRMED_CATALOG_FILE : "/tmp/tuesday-datalake/gold/confirmed_hardware_identifiers.json"
+        target_path = if !Rails.env.test? && File.directory?(File.dirname(CONFIRMED_CATALOG_FILE))
+                        CONFIRMED_CATALOG_FILE
+                      else
+                        RUNTIME_CONFIRMED_CATALOG_FILE
+                      end
         FileUtils.mkdir_p(File.dirname(target_path))
         entries = load_confirmed_catalog.dup
         identifiers.each do |raw_id|
@@ -1363,6 +1369,7 @@ module Discovery
         payload = {
           "updated_at" => Time.now.utc.iso8601,
           "total_matchable_products" => entries.size,
+          "fcc_grantees" => @cached_fcc_grantees || {},
           "identifiers" => entries
         }
         File.write(target_path, JSON.pretty_generate(payload))
