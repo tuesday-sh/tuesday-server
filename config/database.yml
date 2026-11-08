@@ -17,13 +17,14 @@ test:
   
 production:
   <<: *default
+<% if ENV["DATABASE_URL"].present? || ENV["DB_HOST"].present? %>
   adapter: postgresql
   encoding: unicode
-  host: db
-  # host: <%= ENV['DB_HOST'] %>
-  username: postgres
-  # username: tuesday_development
-  password:
-  # password: <%= ENV['DEV_DB_PASSWORD'] %>
-  database: tuesday_production
-  # database: tuesday_development
+  host: <%= ENV.fetch("DB_HOST", "db") %>
+  username: <%= ENV.fetch("DB_USERNAME", "postgres") %>
+  password: <%= ENV["DEV_DB_PASSWORD"] %>
+  database: <%= ENV.fetch("DB_NAME", "tuesday_production") %>
+<% else %>
+  adapter: sqlite3
+  database: <%= ENV.fetch("SQLITE_DB_PATH", "/tmp/tuesday_production.sqlite3") %>
+<% end %>
