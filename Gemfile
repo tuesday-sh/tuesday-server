@@ -51,13 +51,13 @@ gem 'dotenv', '~> 3.1'
 # Use Active Storage variants [https://guides.rubyonrails.org/active_storage_overview.html#transforming-images]
 # gem "image_processing", "~> 1.2"
 
+gem "sqlite3", "~> 2.1"
+
 group :production do
   gem 'pg', '~> 1.5'
 end
 
 group :development, :test do
-  # Use sqlite3 as the database for Active Record
-  gem "sqlite3", "~> 2.1"
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
   gem "debug", platforms: %i[ mri mingw x64_mingw ]
 end
