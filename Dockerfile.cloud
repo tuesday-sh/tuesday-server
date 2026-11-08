@@ -61,4 +61,4 @@ COPY --from=builder --chown=65532:65532 /app /app
 USER 65532:65532
 EXPOSE 8080
 
-CMD ["sh", "-c", "bundle exec rails db:migrate db:seed && exec bundle exec puma -C config/puma.rb -p 8080"]
+CMD ["sh", "-c", "mkdir -p /app/tmp/pids /app/log && bundle exec rails db:migrate db:seed && exec bundle exec puma -C config/puma.rb -p 8080"]

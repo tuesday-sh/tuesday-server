@@ -1,5 +1,6 @@
 .git
 .github
+.env*
 log/*
 !log/.keep
 tmp/*
