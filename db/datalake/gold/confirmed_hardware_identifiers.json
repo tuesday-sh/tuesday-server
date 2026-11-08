@@ -1,5 +1,8 @@
 {
-  "updated_at": "2026-11-08T21:12:24Z",
+  "datalake_version": "2.1.0",
+  "dag_version": "2.1.0",
+  "schema_version": "2.0.0",
+  "updated_at": "2026-11-08T21:27:46Z",
   "total_matchable_products": 9896,
   "total_fcc_grantees": 170,
   "fcc_grantees": {

@@ -2,39 +2,52 @@
   {
     "id": "0192d9f0-feed-7000-8000-000000000001",
     "slug": "cpsc-safety",
-    "pro_name": "CPSC Consumer Safety Recalls",
-    "stn_name": "CPSC Home & Nursery Safety Recalls",
+    "pro_name": "CPSC Consumer Safety & Power Recalls",
+    "stn_name": "CPSC Home, Nursery & Battery Safety Recalls",
     "feed_category": "recall",
     "purl_prefixes": [
-      "pkg:generic/owlet/"
+      "pkg:generic/owlet/",
+      "pkg:generic/anker/",
+      "pkg:generic/ecoflow/",
+      "pkg:generic/baseus/",
+      "pkg:generic/jackery/",
+      "pkg:generic/ugreen/",
+      "pkg:generic/mophie/"
     ]
   },
   {
     "id": "0192d9f0-feed-7000-8000-000000000002",
     "slug": "ubiquiti-advisories",
     "pro_name": "Ubiquiti UniFi Security & Firmware",
-    "stn_name": "UniFi Wi-Fi & Router Updates",
+    "stn_name": "UniFi Wi-Fi, Switch & Gateway Updates",
     "feed_category": "advisory",
     "purl_prefixes": [
-      "pkg:generic/ui/"
+      "pkg:generic/ui/",
+      "pkg:generic/ubiquiti/",
+      "pkg:generic/ubiquiti-unifi/",
+      "pkg:deb/ubiquiti/"
     ]
   },
   {
     "id": "0192d9f0-feed-7000-8000-000000000003",
     "slug": "apple-proxmox-upstream",
-    "pro_name": "Apple macOS & Proxmox VE Releases",
-    "stn_name": "MacBook & Home Server Software",
+    "pro_name": "Apple macOS/iOS & Proxmox VE Releases",
+    "stn_name": "Apple Devices & Home Server Software",
     "feed_category": "release",
     "purl_prefixes": [
-      "pkg:generic/apple/macos",
-      "pkg:deb/debian/proxmox-ve"
+      "pkg:generic/apple/",
+      "pkg:generic/apple-ios/",
+      "pkg:generic/apple-ipados/",
+      "pkg:generic/apple-macos/",
+      "pkg:deb/debian/proxmox-ve",
+      "pkg:generic/proxmox/"
     ]
   },
   {
     "id": "0192d9f0-feed-7000-8000-000000000004",
     "slug": "vendor-eol-ledger",
-    "pro_name": "Vendor EOL & Support Cutoff Ledger",
-    "stn_name": "Manufacturer Lifespan & Retirement Notices",
+    "pro_name": "Netgear PSIRT, Firmware & EOL Ledger",
+    "stn_name": "Netgear Nighthawk, Orbi & Switch Lifespan Notices",
     "feed_category": "eol",
     "purl_prefixes": [
       "pkg:generic/netgear/"
@@ -59,6 +72,7 @@
     "feed_category": "advisory",
     "purl_prefixes": [
       "pkg:generic/lg/webos",
+      "pkg:generic/lg-webos/",
       "pkg:generic/esphome/"
     ]
   },
@@ -73,12 +87,190 @@
     ]
   },
   {
+    "id": "0192d9f0-feed-7000-8000-000000000008",
+    "slug": "isp-docsis-fiber-managed",
+    "pro_name": "US ISP Broadband, DOCSIS 3.1 & Fiber ONT Provisioning",
+    "stn_name": "Internet Provider Modem & Gateway Auto-Updates",
+    "feed_category": "release",
+    "purl_prefixes": [
+      "pkg:generic/xfinity/",
+      "pkg:generic/technicolor/",
+      "pkg:generic/at-t/",
+      "pkg:generic/verizon/",
+      "pkg:generic/spectrum/",
+      "pkg:generic/t-mobile/",
+      "pkg:generic/spacex-starlink/",
+      "pkg:generic/starlink/",
+      "pkg:generic/arris/",
+      "pkg:generic/motorola/",
+      "pkg:generic/hitron/",
+      "pkg:generic/calix/",
+      "pkg:generic/nokia/",
+      "pkg:generic/nokia-fiber/",
+      "pkg:generic/arcadyan-astoria/"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000009",
+    "slug": "tplink-deco-omada-firmware",
+    "pro_name": "TP-Link Omada SDN, Archer & Deco Firmware",
+    "stn_name": "TP-Link Deco Mesh, Wi-Fi & Switch Updates",
+    "feed_category": "advisory",
+    "purl_prefixes": [
+      "pkg:generic/tp-link/"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000010",
+    "slug": "asuswrt-router-firmware",
+    "pro_name": "ASUSWRT & ROG Rapture / ZenWiFi Security Advisories",
+    "stn_name": "ASUS Wi-Fi Router & ZenWiFi Mesh Updates",
+    "feed_category": "advisory",
+    "purl_prefixes": [
+      "pkg:generic/asus/"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000011",
+    "slug": "eero-nest-mesh-releases",
+    "pro_name": "Amazon eeroOS & Google Nest Wifi Release Channel",
+    "stn_name": "Amazon eero & Google Nest Mesh Wi-Fi Updates",
+    "feed_category": "release",
+    "purl_prefixes": [
+      "pkg:generic/amazon-eero/",
+      "pkg:generic/google-nest/"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000012",
+    "slug": "mikrotik-routeros-stable",
+    "pro_name": "MikroTik RouterOS v7 & SwOS Stable Channel",
+    "stn_name": "MikroTik Router & Switch Software Updates",
+    "feed_category": "release",
+    "purl_prefixes": [
+      "pkg:generic/mikrotik/",
+      "pkg:generic/mikrotik-routeros/",
+      "pkg:generic/routeros/"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000013",
+    "slug": "opnsense-pfsense-firewalla",
+    "pro_name": "OPNsense, Netgate pfSense & Firewalla Security Channel",
+    "stn_name": "Home Firewall & Security Appliance Updates",
+    "feed_category": "advisory",
+    "purl_prefixes": [
+      "pkg:generic/opnsense/",
+      "pkg:generic/netgate-pfsense/",
+      "pkg:generic/pfsense/",
+      "pkg:generic/firewalla/"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000014",
+    "slug": "openwrt-glinet-firmware",
+    "pro_name": "OpenWrt Stable & GL.iNet / Cudy Router Firmware",
+    "stn_name": "GL.iNet Travel Router & OpenWrt Firmware Updates",
+    "feed_category": "release",
+    "purl_prefixes": [
+      "pkg:generic/openwrt/",
+      "pkg:generic/gl-inet/",
+      "pkg:generic/cudy/"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000015",
+    "slug": "smb-firewall-psirt",
+    "pro_name": "Fortinet, SonicWall, Zyxel, Meraki & Ruckus PSIRT",
+    "stn_name": "Small Business Firewall & Access Point Security Alerts",
+    "feed_category": "advisory",
+    "purl_prefixes": [
+      "pkg:generic/fortinet/",
+      "pkg:generic/sonicwall/",
+      "pkg:generic/zyxel/",
+      "pkg:generic/watchguard/",
+      "pkg:generic/sophos/",
+      "pkg:generic/cisco-meraki/",
+      "pkg:generic/meraki/",
+      "pkg:generic/ruckus-wireless/",
+      "pkg:generic/aruba-networks/",
+      "pkg:generic/juniper/",
+      "pkg:generic/engenius/"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000016",
+    "slug": "consumer-router-legacy-psirt",
+    "pro_name": "D-Link, Linksys, Belkin, Buffalo & Tenda PSIRT & EOL",
+    "stn_name": "Home Wi-Fi Router Security & Retirement Alerts",
+    "feed_category": "eol",
+    "purl_prefixes": [
+      "pkg:generic/d-link/",
+      "pkg:generic/linksys/",
+      "pkg:generic/belkin/",
+      "pkg:generic/buffalo/",
+      "pkg:generic/tenda/"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000017",
+    "slug": "apc-cyberpower-eaton-ups",
+    "pro_name": "APC Smart-UPS, CyberPower & Eaton Power Firmware",
+    "stn_name": "UPS Battery Backup & Surge Protection Updates",
+    "feed_category": "advisory",
+    "purl_prefixes": [
+      "pkg:generic/apc/",
+      "pkg:generic/apc-by-schneider-electric/",
+      "pkg:generic/cyberpower/",
+      "pkg:generic/eaton/"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000018",
+    "slug": "nas-homelab-storage",
+    "pro_name": "QNAP QTS, TrueNAS SCALE & Linux Server Advisories",
+    "stn_name": "Home NAS Storage & Linux Server Updates",
+    "feed_category": "advisory",
+    "purl_prefixes": [
+      "pkg:generic/qnap/",
+      "pkg:generic/truenas/",
+      "pkg:generic/ubuntu/",
+      "pkg:generic/debian/",
+      "pkg:generic/redhat/",
+      "pkg:generic/rocky-linux/",
+      "pkg:generic/alpine-linux/"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000019",
+    "slug": "smart-home-zigbee-matter-iot",
+    "pro_name": "Home Assistant OS, Raspberry Pi, SMLIGHT & Matter Hubs",
+    "stn_name": "Smart Home Hub, Lighting, Audio & Camera Updates",
+    "feed_category": "release",
+    "purl_prefixes": [
+      "pkg:generic/home-assistant/",
+      "pkg:generic/raspberry-pi/",
+      "pkg:generic/smlight/",
+      "pkg:generic/philips-hue/",
+      "pkg:generic/lutron/",
+      "pkg:generic/sonos/",
+      "pkg:generic/reolink/",
+      "pkg:generic/wyze/",
+      "pkg:generic/shelly/",
+      "pkg:generic/aqara/",
+      "pkg:generic/brother/",
+      "pkg:generic/samsung-galaxy/",
+      "pkg:generic/google-pixel/"
+    ]
+  },
+  {
     "id": "0192d9f0-feed-7000-8000-000000000099",
     "slug": "cisco-ios-xe-enterprise",
     "pro_name": "Cisco Catalyst IOS-XE Enterprise Advisories",
-    "stn_name": "Cisco Enterprise Routers",
+    "stn_name": "Cisco Enterprise Routers & Switches",
     "feed_category": "advisory",
     "purl_prefixes": [
+      "pkg:generic/cisco/",
       "pkg:generic/cisco/ios-xe"
     ]
   },
@@ -89,7 +281,9 @@
     "stn_name": "Synology Home NAS Updates",
     "feed_category": "advisory",
     "purl_prefixes": [
-      "pkg:generic/synology/dsm"
+      "pkg:generic/synology/",
+      "pkg:generic/synology/dsm",
+      "pkg:generic/synology-dsm/"
     ]
   }
 ]

@@ -146,15 +146,17 @@ class HardwareVisionServiceTest < Minitest::Test
       assert_equal "GOLD ALIGNED", first_cand.dig("goldAlignment", "statusLabel")
       assert_equal "ubiquiti-advisories", first_cand.dig("goldAlignment", "matchedFeedSlug")
 
-      # Candidate 2 (GL.iNet GL-MT3000) is an unaligned raw match
+      # Candidate 2 (GL.iNet GL-MT3000) resolves to the GL.iNet vendor feed (`openwrt-glinet-firmware`)
       assert_equal false, second_cand.dig("goldAlignment", "aligned")
-      assert_equal "UNALIGNED RAW MATCH", second_cand.dig("goldAlignment", "statusLabel")
+      assert_equal true, second_cand.dig("goldAlignment", "vendorFeedOnly")
+      assert_equal "UNALIGNED MODEL (VENDOR FEED ONLY)", second_cand.dig("goldAlignment", "statusLabel")
+      assert_equal "openwrt-glinet-firmware", second_cand.dig("goldAlignment", "matchedFeedSlug")
       assert_includes second_cand.dig("goldAlignment", "inferredPurl"), "pkg:generic/gl-inet/gl-mt3000"
 
       # Debug log text and trace are returned
       assert_includes result["debugLogText"], "=== TUESDAY VISION DEBUG LOG"
       assert_includes result["debugLogText"], "[✓ GOLD ALIGNED]"
-      assert_includes result["debugLogText"], "[⚠ UNALIGNED RAW]"
+      assert_includes result["debugLogText"], "[⚠ VENDOR FEED ONLY]"
       assert result["debugTrace"].any? { |t| t.include?("[LLM_PARSE]") }
       assert result["debugTrace"].any? { |t| t.include?("[PURL_RESOLVE]") }
       assert result["debugTrace"].any? { |t| t.include?("[GOLD_AUDIT]") }

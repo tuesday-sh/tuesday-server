@@ -1,15 +1,31 @@
 {
-  "schema_version": "1.0.0",
-  "generated_at": "2026-11-06T21:01:45Z",
+  "datalake_version": "2.1.0",
+  "dag_version": "2.1.0",
+  "schema_version": "2.0.0",
+  "retention_policy": "US_10YR_TOMBSTONE_COMPACTION_15YR_IDENTITY",
+  "generated_at": "2026-11-08T21:27:46Z",
   "enricher_provider": "elastix",
   "enricher_model": "gpt-oss-120b",
-  "enriched_items_count": 8,
-  "cached_items_count": 0,
-  "total_bulletins_count": 8,
-  "artifacts": {
-    "canonical_feeds.json": "sha256:32fd5b1dc54f0759df6fc77eadf5d539602c13d80a912169f02950c762280f09",
-    "curated_bulletins.json": "sha256:4d6fbc55861a5dd0e57207d5025075f305ffcaff2b0bc7f3484d5dee19d42a18",
-    "catalog_releases.json": "sha256:60d2c6be10a66a377cef497173fd17127169a6f94a9eee1bea94a2c38dd704e2"
+  "counts": {
+    "matchable_products": 9896,
+    "fcc_grantees": 170,
+    "canonical_feeds": 21,
+    "catalog_releases": 34,
+    "remediation_playbooks": 957,
+    "curated_bulletins": 7487
   },
-  "manifest_digest": "sha256:3cc602e29bff908c77bd9b651a0531582e0298c2e664c6f6d9267df50f5442bc"
+  "artifacts": {
+    "canonical_feeds.json": "sha256:0408350309d6a2a24cf71e3090c282cddb5bd800f9bb6b8c58a20b68d99350aa",
+    "catalog_releases.json": "sha256:3b37367208872420e0a807abda5a924ec50a13f1fa8fc4a3eb16a98af3c99458",
+    "curated_bulletins.json": "sha256:4d6fbc55861a5dd0e57207d5025075f305ffcaff2b0bc7f3484d5dee19d42a18",
+    "confirmed_hardware_identifiers.json": "sha256:1737dd4b0515dee0375822d58770b18f460b8e17185b29f89860062d97a57c06",
+    "bq_matchable_products.jsonl": "sha256:22a65614a47edb731a8d956a465b2a38ba335579776ac9818627425675ab8034",
+    "bq_remediation_playbooks.jsonl": "sha256:a150f9e220a8dc8ebf04c4f5397b598f79253c63f1650e67428b0b5b3aa6cf79",
+    "bq_curated_bulletins.jsonl": "sha256:afaced0c9103aaf84b3ac9016adb8c8e561fc0053b94278d6954388ceace2000",
+    "deterministic_ingestion_dag.yaml": "sha256:fd4331620ce9e36165f70a160c2bb590adb5df207b2ee27d17c6a37271e51055",
+    "bulletin_refinement_dag.yaml": "sha256:2c5d6f7bf681089056650e4fe0d87a54a653c40b32b40fb7eecbc7d8a0b3a2c3"
+  },
+  "manifest_digest": "sha256:19c46202edaae95bd34f345da27521d7419e7909b5b6c70d866f9540d0918092",
+  "released_at": "2026-11-08T21:27:47Z",
+  "release_notes": "Add 21 canonical firmware feeds, 29 release streams, US ISP gateways, and OpenWrt ToH 3,119 hardware models"
 }
