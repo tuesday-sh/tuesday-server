@@ -18,7 +18,11 @@ Rails.application.routes.draw do
       end
       post "discovery/analyze", to: "discovery#analyze"
       post "discovery/confirm", to: "discovery#confirm"
+      post "discovery/resolve", to: "discovery#resolve"
       get "discovery/livetail", to: "discovery#livetail"
+      get "discovery/sessions", to: "discovery#sessions"
+      post "telemetry/events", to: "telemetry#create"
+      get "telemetry/summary", to: "telemetry#summary"
       post "billing/verify", to: "billing#verify"
     end
   end

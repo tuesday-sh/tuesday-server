@@ -56,6 +56,10 @@ module Telemetry
         device_id: "anonymous",
         session_id: nil,
         turn_index: 1,
+        routing_tier: nil,
+        short_circuit_source: nil,
+        image_count: 0,
+        image_kb_total: 0.0,
         fallback_used: false,
         short_circuited: false,
         latency_ms: 0,
@@ -66,7 +70,12 @@ module Telemetry
         confidence: nil,
         inferred_vendor: nil,
         inferred_model: nil,
+        gold_alignment_status: nil,
+        matched_feed_slug: nil,
+        candidate_count: 0,
+        candidates_snapshot: [],
         extracted_identifiers: [],
+        user_clue_notes: [],
         async: !Rails.env.test?
       )
         total_tokens = input_tokens.to_i + output_tokens.to_i + cache_read_tokens.to_i + cache_write_tokens.to_i
@@ -76,6 +85,16 @@ module Telemetry
           output_tokens: output_tokens,
           cache_read_tokens: cache_read_tokens
         )
+
+        resolved_tier = routing_tier.presence || (if short_circuited
+                                                    "tier1_short_circuit"
+                                                  elsif model.to_s == "heuristic-fallback"
+                                                    "tier3_heuristic"
+                                                  elsif fallback_used
+                                                    "tier2_gemini_failover"
+                                                  else
+                                                    "tier2_elastix_vision"
+                                                  end)
 
         now = Time.now.utc
         record = {
@@ -90,6 +109,10 @@ module Telemetry
           "deviceId" => device_id.to_s,
           "sessionId" => session_id.to_s,
           "turnIndex" => turn_index.to_i,
+          "routingTier" => resolved_tier,
+          "shortCircuitSource" => short_circuit_source,
+          "imageCount" => image_count.to_i,
+          "imageKbTotal" => image_kb_total.to_f.round(1),
           "provider" => provider.to_s,
           "model" => model.to_s,
           "status" => status.to_s,
@@ -106,7 +129,12 @@ module Telemetry
           "confidence" => confidence&.to_f,
           "inferredVendor" => inferred_vendor,
           "inferredModel" => inferred_model,
+          "goldAlignmentStatus" => gold_alignment_status,
+          "matchedFeedSlug" => matched_feed_slug,
+          "candidateCount" => candidate_count.to_i,
+          "candidatesSnapshot" => Array(candidates_snapshot).first(5),
           "extractedIdentifiers" => Array(extracted_identifiers).map(&:to_s).first(20),
+          "userClueNotes" => Array(user_clue_notes).map(&:to_s).first(20),
           "imageRetention" => "none_ephemeral_ram_only"
         }
 
@@ -123,10 +151,29 @@ module Telemetry
         confirmed_vendor:,
         confirmed_model:,
         was_edited: false,
+        resolution_status: "confirmed_candidate",
+        selected_candidate_rank: 0,
+        initial_mode: "photo_wizard",
+        final_mode: "photo_wizard",
+        turns_count: 1,
+        total_llm_turns: 0,
+        total_tokens: 0,
+        total_latency_ms: 0,
+        gold_alignment_status: nil,
+        needs_catalog_review: false,
         extracted_identifiers: [],
+        user_clue_notes: [],
         async: !Rails.env.test?
       )
         now = Time.now.utc
+        accuracy_score = if resolution_status.to_s == "confirmed_candidate" && !was_edited
+                           selected_candidate_rank.to_i == 0 ? 1.0 : 0.75
+                         elsif resolution_status.to_s == "confirmed_candidate" && was_edited
+                           0.5
+                         else
+                           0.0
+                         end
+
         record = {
           "event" => "hosted_ai_confirm",
           "timestamp" => now.iso8601(3),
@@ -138,17 +185,57 @@ module Telemetry
           "clientPlatform" => client_platform.to_s,
           "deviceId" => device_id.to_s,
           "sessionId" => session_id.to_s,
+          "resolutionStatus" => resolution_status.to_s,
+          "selectedCandidateRank" => selected_candidate_rank,
+          "initialMode" => initial_mode.to_s,
+          "finalMode" => final_mode.to_s,
+          "turnsCount" => turns_count.to_i,
+          "totalLlmTurns" => total_llm_turns.to_i,
+          "totalTokens" => total_tokens.to_i,
+          "totalLatencyMs" => total_latency_ms.to_i,
           "inferredVendor" => inferred_vendor,
           "inferredModel" => inferred_model,
           "confirmedVendor" => confirmed_vendor.to_s,
           "confirmedModel" => confirmed_model.to_s,
           "wasEdited" => !!was_edited,
-          "accuracyScore" => was_edited ? 0.0 : 1.0,
+          "accuracyScore" => accuracy_score,
+          "goldAlignmentStatus" => gold_alignment_status,
+          "needsCatalogReview" => !!needs_catalog_review,
           "extractedIdentifiers" => Array(extracted_identifiers).map(&:to_s).first(20),
+          "userClueNotes" => Array(user_clue_notes).map(&:to_s).first(20),
           "imageRetention" => "none_ephemeral_ram_only"
         }
 
         dispatch_record(record, async: async)
+        record
+      end
+
+      def log_product_event(event_hash, async: !Rails.env.test?, bronze_dir: ENV.fetch("BRONZE_LAKE_DIR", DEFAULT_BRONZE_DIR))
+        now = Time.now.utc
+        record = {
+          "event" => "product_telemetry",
+          "timestamp" => now.iso8601(3),
+          "date" => now.strftime("%Y-%m-%d"),
+          "venture" => "tuesday-sh",
+          "source" => "tuesday-server",
+          "environment" => Rails.env
+        }.merge(event_hash.transform_keys(&:to_s))
+
+        write_task = proc do
+          FileUtils.mkdir_p(bronze_dir)
+          file_path = File.join(bronze_dir, "product_telemetry_events.jsonl")
+          File.open(file_path, "a") do |f|
+            f.puts(JSON.generate(record))
+          end
+        rescue StandardError => e
+          Rails.logger.warn("[Telemetry::HostedAiLogger] Product telemetry bronze write skipped: #{e.message}")
+        end
+
+        if async
+          Thread.new(&write_task)
+        else
+          write_task.call
+        end
         record
       end
 

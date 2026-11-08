@@ -135,6 +135,8 @@ module Discovery
         turn_index: 1,
         client_platform: "unknown",
         device_id: "anonymous",
+        network_site_id: nil,
+        initial_mode: "photo_wizard",
         provider_override: "auto",
         previous_guess: nil,
         extracted_identifiers: [],
@@ -283,6 +285,34 @@ module Discovery
         top_vendor = result["vendor"] || top_candidate["manufacturer"] || "Unknown Vendor"
         top_model = result["model"] || top_candidate["modelNumber"] || "Unidentified Hardware"
         top_confidence = result["confidence"] || ((top_candidate["confidencePercent"] || 65).to_f / 100.0)
+        top_alignment = top_candidate["goldAlignment"] || {}
+        top_gold_status = top_alignment["statusLabel"] || "UNALIGNED RAW MATCH"
+        top_feed_slug = top_alignment["matchedFeedSlug"]
+        short_circuit_source = short_circuited ? (result["shortCircuitSource"] || "catalog") : nil
+        routing_tier = if short_circuited
+                         "tier1_short_circuit"
+                       elsif model_used.to_s == "heuristic-fallback"
+                         "tier3_heuristic"
+                       elsif fallback_used
+                         "tier2_gemini_failover"
+                       else
+                         "tier2_elastix_vision"
+                       end
+
+        candidates_snapshot = audited_candidates.map.with_index do |c, idx|
+          ga = c["goldAlignment"] || {}
+          {
+            "rank" => idx,
+            "manufacturer" => c["manufacturer"],
+            "modelNumber" => c["modelNumber"],
+            "displayName" => c["displayName"],
+            "deviceCategory" => c["deviceCategory"],
+            "confidencePercent" => c["confidencePercent"],
+            "goldAlignmentStatus" => ga["statusLabel"],
+            "matchedFeedSlug" => ga["matchedFeedSlug"],
+            "inferredPurl" => ga["inferredPurl"]
+          }
+        end
 
         telemetry_record = Telemetry::HostedAiLogger.log_ai_call(
           feature: "hardware_discovery",
@@ -293,6 +323,10 @@ module Discovery
           device_id: device_id,
           session_id: session_id,
           turn_index: turn_index,
+          routing_tier: routing_tier,
+          short_circuit_source: short_circuit_source,
+          image_count: frame_kb_sizes.size,
+          image_kb_total: frame_kb_sizes.sum,
           fallback_used: fallback_used,
           short_circuited: short_circuited,
           latency_ms: latency_ms,
@@ -302,7 +336,12 @@ module Discovery
           confidence: top_confidence,
           inferred_vendor: top_vendor,
           inferred_model: top_model,
-          extracted_identifiers: normalized_clues[:flat_list]
+          gold_alignment_status: top_gold_status,
+          matched_feed_slug: top_feed_slug,
+          candidate_count: audited_candidates.size,
+          candidates_snapshot: candidates_snapshot,
+          extracted_identifiers: normalized_clues[:flat_list],
+          user_clue_notes: Array(user_clue_notes)
         )
 
         provider_label = if short_circuited
@@ -320,6 +359,37 @@ module Discovery
                            else
                              "coach_next_angle"
                            end
+
+        persist_discovery_turn_telemetry!(
+          session_id: session_id,
+          turn_index: turn_index,
+          network_site_id: network_site_id,
+          client_platform: client_platform,
+          device_id: device_id,
+          initial_mode: initial_mode,
+          image_count: frame_kb_sizes.size,
+          image_kb_total: frame_kb_sizes.sum,
+          routing_tier: routing_tier,
+          short_circuit_source: short_circuit_source,
+          provider: provider_used,
+          model: model_used,
+          short_circuited: short_circuited,
+          fallback_used: fallback_used,
+          latency_ms: latency_ms,
+          usage: usage,
+          top_vendor: top_vendor,
+          top_model: top_model,
+          top_confidence: top_confidence,
+          discovery_status: discovery_status,
+          gold_alignment_status: top_gold_status,
+          matched_feed_slug: top_feed_slug,
+          extracted_identifiers_obj: result["extractedIdentifiersObject"] || normalized_clues[:object],
+          extracted_identifiers_flat: normalized_clues[:flat_list],
+          user_clue_notes: Array(user_clue_notes),
+          previous_guess: previous_guess,
+          candidates_snapshot: candidates_snapshot,
+          next_narrowing_question: next_prompt
+        )
 
         coaching_directive = {
           "status" => discovery_status,
@@ -405,18 +475,33 @@ module Discovery
         session_id:,
         client_platform: "unknown",
         device_id: "anonymous",
+        network_site_id: nil,
+        monitored_device_id: nil,
         inferred_vendor: nil,
         inferred_model: nil,
-        confirmed_vendor:,
-        confirmed_model:,
+        confirmed_vendor: nil,
+        confirmed_model: nil,
         was_edited: false,
+        resolution_status: "confirmed_candidate",
+        selected_candidate_rank: 0,
+        initial_mode: "photo_wizard",
+        final_mode: nil,
         extracted_identifiers: [],
+        user_clue_notes: [],
         suggested_lifecycle_tier: "active",
         suggested_trust_zone: "z1_trusted"
       )
         clean_identifiers = Array(extracted_identifiers).map(&:to_s).map(&:strip).reject(&:empty?).uniq
+        clean_clues = Array(user_clue_notes).map(&:to_s).map(&:strip).reject(&:empty?).uniq
+        norm_status = DiscoverySession::VALID_RESOLUTION_STATUSES.include?(resolution_status.to_s) ? resolution_status.to_s : "confirmed_candidate"
+        resolved_final_mode = final_mode.presence || (case norm_status
+                                                      when "pivoted_to_barcode" then "barcode_scan"
+                                                      when "pivoted_to_manual" then "manual_agent"
+                                                      else initial_mode.presence || "photo_wizard"
+                                                      end)
 
-        if clean_identifiers.any? && !confirmed_vendor.to_s.strip.empty? && !confirmed_model.to_s.strip.empty?
+        # Only promote identifiers into the Gold Confirmed Catalog when the user explicitly confirmed a candidate
+        if norm_status == "confirmed_candidate" && clean_identifiers.any? && !confirmed_vendor.to_s.strip.empty? && !confirmed_model.to_s.strip.empty?
           promote_confirmed_identifiers(
             identifiers: clean_identifiers,
             vendor: confirmed_vendor.to_s.strip,
@@ -426,16 +511,46 @@ module Discovery
           )
         end
 
-        Telemetry::HostedAiLogger.log_confirmation(
+        session_row = persist_discovery_resolution_telemetry!(
           session_id: session_id,
+          network_site_id: network_site_id,
+          monitored_device_id: monitored_device_id,
           client_platform: client_platform,
           device_id: device_id,
+          initial_mode: initial_mode,
+          final_mode: resolved_final_mode,
+          resolution_status: norm_status,
+          selected_candidate_rank: selected_candidate_rank,
+          was_edited: was_edited,
           inferred_vendor: inferred_vendor,
           inferred_model: inferred_model,
           confirmed_vendor: confirmed_vendor,
           confirmed_model: confirmed_model,
+          extracted_identifiers: clean_identifiers,
+          user_clue_notes: clean_clues
+        )
+
+        Telemetry::HostedAiLogger.log_confirmation(
+          session_id: session_id,
+          client_platform: client_platform,
+          device_id: device_id,
+          inferred_vendor: session_row&.inferred_vendor || inferred_vendor,
+          inferred_model: session_row&.inferred_model || inferred_model,
+          confirmed_vendor: confirmed_vendor.to_s,
+          confirmed_model: confirmed_model.to_s,
           was_edited: was_edited,
-          extracted_identifiers: clean_identifiers
+          resolution_status: norm_status,
+          selected_candidate_rank: selected_candidate_rank,
+          initial_mode: session_row&.initial_mode || initial_mode,
+          final_mode: resolved_final_mode,
+          turns_count: session_row&.turns_count || 1,
+          total_llm_turns: session_row&.total_llm_turns || 0,
+          total_tokens: session_row&.total_tokens || 0,
+          total_latency_ms: session_row&.total_latency_ms || 0,
+          gold_alignment_status: session_row&.gold_alignment_status,
+          needs_catalog_review: session_row ? session_row.needs_catalog_review : (norm_status != "confirmed_candidate" || was_edited),
+          extracted_identifiers: clean_identifiers,
+          user_clue_notes: clean_clues
         )
       end
 
@@ -481,7 +596,8 @@ module Discovery
             reasoning: "Matched exact UPC/GTIN barcode (#{upc}) to #{entry['vendor']} #{model_display} in Gold Hardware Catalog (0 LLM turns).",
             lifecycle_tier: entry["lifecycle_tier"] || "active",
             trust_zone: entry["trust_zone"] || "z1_trusted",
-            clues: normalized_clues
+            clues: normalized_clues,
+            short_circuit_source: "upc_gtin"
           )
         end
 
@@ -511,9 +627,13 @@ module Discovery
           end
 
           entry = idx[:by_fcc_id][norm_fcc]
+          sc_source = "fcc_id"
           if entry.nil? && grantee_prefix && grantee_info && grantee_info["type"] == "HOST_DEVICE"
             prod_suffix = norm_fcc.sub(/\A#{Regexp.escape(grantee_prefix)}/, "").downcase
-            entry = idx[:by_model_slug][prod_suffix] if prod_suffix.length >= 3
+            if prod_suffix.length >= 3 && idx[:by_model_slug][prod_suffix]
+              entry = idx[:by_model_slug][prod_suffix]
+              sc_source = "fcc_grantee_suffix"
+            end
           end
           next unless entry
 
@@ -532,7 +652,8 @@ module Discovery
             reasoning: "Matched FCC OET Equipment Grant (#{entry['fcc_id'] || raw_fcc.upcase}) to #{entry['vendor']} #{model_display} in Gold Hardware Catalog (0 LLM turns).",
             lifecycle_tier: entry["lifecycle_tier"] || "active",
             trust_zone: entry["trust_zone"] || "z1_trusted",
-            clues: normalized_clues
+            clues: normalized_clues,
+            short_circuit_source: sc_source
           )
         end
 
@@ -562,7 +683,8 @@ module Discovery
             reasoning: "Matched verified hardware identifier (#{token}) in Gold Confirmed Catalog (0 LLM turns).",
             lifecycle_tier: entry["lifecycle_tier"] || "active",
             trust_zone: entry["trust_zone"] || "z1_trusted",
-            clues: normalized_clues
+            clues: normalized_clues,
+            short_circuit_source: "confirmed_identifier"
           )
         end
 
@@ -581,7 +703,8 @@ module Discovery
               reasoning: sig[:reasoning],
               lifecycle_tier: sig[:lifecycle_tier],
               trust_zone: sig[:trust_zone],
-              clues: normalized_clues
+              clues: normalized_clues,
+              short_circuit_source: "built_in_signature"
             )
           end
         end
@@ -608,7 +731,8 @@ module Discovery
             reasoning: "Matched verified hardware identifier (#{token}) in Gold Confirmed Catalog (0 LLM turns).",
             lifecycle_tier: entry["lifecycle_tier"] || "active",
             trust_zone: entry["trust_zone"] || "z1_trusted",
-            clues: normalized_clues
+            clues: normalized_clues,
+            short_circuit_source: "model_slug"
           )
         end
 
@@ -676,7 +800,7 @@ module Discovery
         { object: obj, flat_list: flat.uniq }
       end
 
-      def build_catalog_turn_payload(vendor:, model:, display_name:, category:, hostname:, os_details:, pkg_manager:, confidence_pct:, reasoning:, lifecycle_tier:, trust_zone:, clues:)
+      def build_catalog_turn_payload(vendor:, model:, display_name:, category:, hostname:, os_details:, pkg_manager:, confidence_pct:, reasoning:, lifecycle_tier:, trust_zone:, clues:, short_circuit_source: "catalog")
         obj = clues[:object].dup
         obj["modelNumber"] ||= model
         {
@@ -684,6 +808,7 @@ module Discovery
           "nextNarrowingQuestion" => "Identifier verified in Tuesday Gold Catalog (#{display_name}). Confirm match below or add additional clues.",
           "recommendedClueTypes" => DEFAULT_CLUE_TYPES,
           "extractedIdentifiersObject" => obj,
+          "shortCircuitSource" => short_circuit_source,
           "candidates" => [
             {
               "manufacturer" => vendor,
@@ -705,6 +830,219 @@ module Discovery
           "suggestedLifecycleTier" => lifecycle_tier,
           "suggestedTrustZone" => trust_zone
         }
+      end
+
+      def persist_discovery_turn_telemetry!(
+        session_id:,
+        turn_index:,
+        network_site_id:,
+        client_platform:,
+        device_id:,
+        initial_mode:,
+        image_count:,
+        image_kb_total:,
+        routing_tier:,
+        short_circuit_source:,
+        provider:,
+        model:,
+        short_circuited:,
+        fallback_used:,
+        latency_ms:,
+        usage:,
+        top_vendor:,
+        top_model:,
+        top_confidence:,
+        discovery_status:,
+        gold_alignment_status:,
+        matched_feed_slug:,
+        extracted_identifiers_obj:,
+        extracted_identifiers_flat:,
+        user_clue_notes:,
+        previous_guess:,
+        candidates_snapshot:,
+        next_narrowing_question:
+      )
+        return nil unless defined?(DiscoverySession) && DiscoverySession.table_exists?
+
+        norm_mode = DiscoverySession::VALID_MODES.include?(initial_mode.to_s) ? initial_mode.to_s : "photo_wizard"
+        session = DiscoverySession.find_or_initialize_by(session_id: session_id.to_s)
+        if session.new_record?
+          session.network_site_id = network_site_id
+          session.client_platform = client_platform.to_s
+          session.device_id = device_id.to_s
+          session.initial_mode = norm_mode
+          session.final_mode = norm_mode
+          session.resolution_status = "in_progress"
+        elsif network_site_id.present? && session.network_site_id.nil?
+          session.network_site_id = network_site_id
+        end
+
+        turn_tokens = usage[:input_tokens].to_i + usage[:output_tokens].to_i + usage[:cache_read_tokens].to_i
+        session.turns_count = [session.turns_count.to_i + 1, turn_index.to_i].max
+        session.total_photos_submitted = session.total_photos_submitted.to_i + image_count.to_i
+        session.total_clues_submitted = [session.total_clues_submitted.to_i, Array(user_clue_notes).size].max
+        if short_circuited
+          session.short_circuited_turns = session.short_circuited_turns.to_i + 1
+        elsif routing_tier != "tier3_heuristic"
+          session.total_llm_turns = session.total_llm_turns.to_i + 1
+        end
+        session.total_tokens = session.total_tokens.to_i + turn_tokens
+        session.total_latency_ms = session.total_latency_ms.to_i + latency_ms.to_i
+        session.inferred_vendor = top_vendor
+        session.inferred_model = top_model
+        session.top_confidence = top_confidence
+        session.gold_alignment_status = gold_alignment_status
+        session.matched_feed_slug = matched_feed_slug
+        session.extracted_identifiers_list = (session.extracted_identifiers_list + Array(extracted_identifiers_flat)).uniq
+        session.user_clue_notes_list = (session.user_clue_notes_list + Array(user_clue_notes)).uniq
+        session.needs_catalog_review = (gold_alignment_status != "GOLD ALIGNED")
+        session.save!
+
+        turn = session.discovery_turns.create!(
+          session_id: session.session_id,
+          turn_index: turn_index.to_i,
+          image_count: image_count.to_i,
+          image_kb_total: image_kb_total.to_f.round(1),
+          routing_tier: routing_tier,
+          short_circuit_source: short_circuit_source,
+          provider: provider.to_s,
+          model: model.to_s,
+          short_circuited: !!short_circuited,
+          fallback_used: !!fallback_used,
+          latency_ms: latency_ms.to_i,
+          input_tokens: usage[:input_tokens].to_i,
+          output_tokens: usage[:output_tokens].to_i,
+          cache_read_tokens: usage[:cache_read_tokens].to_i,
+          top_vendor: top_vendor,
+          top_model: top_model,
+          top_confidence: top_confidence,
+          discovery_status: discovery_status,
+          gold_alignment_status: gold_alignment_status,
+          candidate_count: Array(candidates_snapshot).size,
+          extracted_identifiers_object: extracted_identifiers_obj || {},
+          user_clue_notes_list: Array(user_clue_notes),
+          previous_guess_object: previous_guess || {},
+          candidates_list: Array(candidates_snapshot),
+          next_narrowing_question: next_narrowing_question
+        )
+
+        if defined?(ProductTelemetryEvent) && ProductTelemetryEvent.table_exists?
+          ProductTelemetryEvent.create!(
+            event_name: "discovery.turn_completed",
+            event_domain: "discovery",
+            network_site_id: session.network_site_id,
+            client_platform: client_platform.to_s,
+            device_id: device_id.to_s,
+            session_id: session.session_id,
+            target_entity_type: "DiscoverySession",
+            target_entity_id: session.session_id,
+            latency_ms: latency_ms.to_i,
+            llm_turns: short_circuited || routing_tier == "tier3_heuristic" ? 0 : 1,
+            total_tokens: turn_tokens,
+            properties: {
+              turnIndex: turn_index.to_i,
+              routingTier: routing_tier,
+              shortCircuitSource: short_circuit_source,
+              imageCount: image_count.to_i,
+              userClueCount: Array(user_clue_notes).size,
+              topVendor: top_vendor,
+              topModel: top_model,
+              topConfidence: top_confidence,
+              goldAlignmentStatus: gold_alignment_status,
+              candidateCount: Array(candidates_snapshot).size
+            }
+          )
+        end
+
+        turn
+      rescue StandardError => e
+        Rails.logger.warn("[Discovery::HardwareVisionService] Turn telemetry DB write skipped: #{e.message}")
+        nil
+      end
+
+      def persist_discovery_resolution_telemetry!(
+        session_id:,
+        network_site_id:,
+        monitored_device_id:,
+        client_platform:,
+        device_id:,
+        initial_mode:,
+        final_mode:,
+        resolution_status:,
+        selected_candidate_rank:,
+        was_edited:,
+        inferred_vendor:,
+        inferred_model:,
+        confirmed_vendor:,
+        confirmed_model:,
+        extracted_identifiers:,
+        user_clue_notes:
+      )
+        return nil unless defined?(DiscoverySession) && DiscoverySession.table_exists?
+
+        norm_init = DiscoverySession::VALID_MODES.include?(initial_mode.to_s) ? initial_mode.to_s : "photo_wizard"
+        norm_final = DiscoverySession::VALID_MODES.include?(final_mode.to_s) ? final_mode.to_s : norm_init
+        session = DiscoverySession.find_or_initialize_by(session_id: session_id.to_s)
+        if session.new_record?
+          session.client_platform = client_platform.to_s
+          session.device_id = device_id.to_s
+          session.initial_mode = norm_init
+        end
+        session.network_site_id ||= network_site_id
+        session.monitored_device_id = monitored_device_id if monitored_device_id.present?
+        session.final_mode = norm_final
+        session.resolution_status = resolution_status
+        session.selected_candidate_rank = selected_candidate_rank
+        session.was_edited = !!was_edited
+        session.inferred_vendor = inferred_vendor if inferred_vendor.present?
+        session.inferred_model = inferred_model if inferred_model.present?
+        session.confirmed_vendor = confirmed_vendor if confirmed_vendor.present?
+        session.confirmed_model = confirmed_model if confirmed_model.present?
+        session.extracted_identifiers_list = (session.extracted_identifiers_list + Array(extracted_identifiers)).uniq
+        session.user_clue_notes_list = (session.user_clue_notes_list + Array(user_clue_notes)).uniq
+        session.needs_catalog_review = (
+          resolution_status != "confirmed_candidate" ||
+          !!was_edited ||
+          session.gold_alignment_status != "GOLD ALIGNED"
+        )
+        session.resolved_at = Time.now.utc
+        session.save!
+
+        if defined?(ProductTelemetryEvent) && ProductTelemetryEvent.table_exists?
+          ev = ProductTelemetryEvent.create!(
+            event_name: "discovery.session_resolved",
+            event_domain: "discovery",
+            network_site_id: session.network_site_id,
+            client_platform: client_platform.to_s,
+            device_id: device_id.to_s,
+            session_id: session.session_id,
+            target_entity_type: monitored_device_id ? "MonitoredDevice" : "DiscoverySession",
+            target_entity_id: (monitored_device_id || session.session_id).to_s,
+            latency_ms: session.total_latency_ms,
+            llm_turns: session.total_llm_turns,
+            total_tokens: session.total_tokens,
+            properties: {
+              resolutionStatus: resolution_status,
+              selectedCandidateRank: selected_candidate_rank,
+              wasEdited: !!was_edited,
+              initialMode: session.initial_mode,
+              finalMode: session.final_mode,
+              turnsCount: session.turns_count,
+              inferredVendor: session.inferred_vendor,
+              inferredModel: session.inferred_model,
+              confirmedVendor: session.confirmed_vendor,
+              confirmedModel: session.confirmed_model,
+              goldAlignmentStatus: session.gold_alignment_status,
+              needsCatalogReview: session.needs_catalog_review
+            }
+          )
+          Telemetry::HostedAiLogger.log_product_event(ev.to_telemetry_hash)
+        end
+
+        session
+      rescue StandardError => e
+        Rails.logger.warn("[Discovery::HardwareVisionService] Resolution telemetry DB write skipped: #{e.message}")
+        nil
       end
 
       def call_elastix_chat_completions(session_id:, turn_index:, previous_guess:, clues:, ephemeral_frames:)

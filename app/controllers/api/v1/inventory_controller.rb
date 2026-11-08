@@ -68,6 +68,19 @@ module Api
         device.version_history_list = Array(params[:version_history]) if params[:version_history].present?
 
         if device.save
+          emit_inventory_telemetry(
+            event_name: "inventory.device_enrolled",
+            site: site,
+            device: device,
+            properties: {
+              confidenceTier: device.confidence_tier,
+              categoryCode: device.category_code,
+              trustZone: device.trust_zone,
+              vendor: device.vendor,
+              modelNumber: device.model_number,
+              purls: device.purls_list
+            }
+          )
           render json: {
             status: "created",
             device: device.to_gold_hash,
@@ -122,6 +135,40 @@ module Api
         end
 
         if device.save
+          if params[:confirmed_candidate_model].present?
+            emit_inventory_telemetry(
+              event_name: "inventory.disambiguated",
+              site: site,
+              device: device,
+              properties: {
+                confirmedModel: device.model_number,
+                vendor: device.vendor,
+                candidateModels: device.candidate_models_list
+              }
+            )
+          elsif ActiveModel::Type::Boolean.new.cast(params[:mark_remediated])
+            emit_inventory_telemetry(
+              event_name: "inventory.remediated",
+              site: site,
+              device: device,
+              properties: {
+                vendor: device.vendor,
+                modelNumber: device.model_number,
+                version: device.version
+              }
+            )
+          elsif params.key?(:excluded_purl_prefixes) || params[:add_excluded_purl_prefix].present?
+            emit_inventory_telemetry(
+              event_name: "inventory.purl_pruned",
+              site: site,
+              device: device,
+              properties: {
+                vendor: device.vendor,
+                modelNumber: device.model_number,
+                excludedPurlPrefixes: device.excluded_purl_prefixes_list
+              }
+            )
+          end
           render json: {
             status: "updated",
             device: device.to_gold_hash,
@@ -172,6 +219,24 @@ module Api
       end
 
       private
+
+      def emit_inventory_telemetry(event_name:, site:, device:, properties: {})
+        return unless defined?(ProductTelemetryEvent) && ProductTelemetryEvent.table_exists?
+
+        ev = ProductTelemetryEvent.create!(
+          event_name: event_name,
+          event_domain: "inventory",
+          network_site_id: site&.id,
+          client_platform: (request.headers["X-Tuesday-Client-Platform"].presence || params[:client_platform].presence || "unknown").to_s.downcase,
+          device_id: (request.headers["X-Tuesday-Device-ID"].presence || params[:device_id].presence || "anonymous").to_s,
+          target_entity_type: "MonitoredDevice",
+          target_entity_id: device.external_uuid,
+          properties: properties
+        )
+        Telemetry::HostedAiLogger.log_product_event(ev.to_telemetry_hash)
+      rescue StandardError => e
+        Rails.logger.warn("[Api::V1::InventoryController] Telemetry emit skipped: #{e.message}")
+      end
 
       def serialize_site(site)
         return nil if site.nil?

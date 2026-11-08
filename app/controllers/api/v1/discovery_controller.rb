@@ -21,8 +21,8 @@ module Api
       ANON_HOURLY_LIMIT = 30
       AUTH_HOURLY_LIMIT = 300
 
-      before_action :authenticate_and_rate_limit!, except: [:livetail]
-      before_action :authenticate_livetail!, only: [:livetail]
+      before_action :authenticate_and_rate_limit!, except: [:livetail, :sessions]
+      before_action :authenticate_livetail!, only: [:livetail, :sessions]
 
       # POST /api/v1/discovery/analyze
       def analyze
@@ -53,6 +53,8 @@ module Api
           turn_index: (params[:turn_index] || 1).to_i,
           client_platform: @client_platform,
           device_id: @device_id,
+          network_site_id: current_network_site(auto_create: false)&.id,
+          initial_mode: params[:initial_mode].presence || "photo_wizard",
           provider_override: params[:provider_override].presence || params[:provider_preference].presence || "auto",
           previous_guess: previous_guess,
           extracted_identifiers: params[:extracted_identifiers] || [],
@@ -107,50 +109,90 @@ module Api
         render json: payload
       end
 
-      # POST /api/v1/discovery/confirm
+      # GET /api/v1/discovery/sessions
+      def sessions
+        limit = (params[:limit] || 20).to_i.clamp(1, 100)
+        scope = DiscoverySession.includes(:discovery_turns).order(updated_at: :desc)
+        scope = scope.where(session_id: params[:session_id].to_s) if params[:session_id].present?
+        scope = scope.where(resolution_status: params[:resolution_status].to_s) if params[:resolution_status].present?
+        scope = scope.where(needs_catalog_review: true) if ActiveModel::Type::Boolean.new.cast(params[:needs_catalog_review])
+
+        records = scope.limit(limit).map(&:to_funnel_hash)
+        render json: {
+          status: "ok",
+          count: records.size,
+          sessions: records
+        }
+      end
+
+      # POST /api/v1/discovery/confirm (and POST /api/v1/discovery/resolve)
       def confirm
+        resolution_status = params[:resolution_status].presence || "confirmed_candidate"
         confirmed_vendor = params[:confirmed_vendor].to_s.strip
         confirmed_model = params[:confirmed_model].to_s.strip
 
-        if confirmed_vendor.empty? || confirmed_model.empty?
+        # When confirming a candidate directly, vendor & model are required.
+        # For saved_best_guess, fallback to inferred_vendor / inferred_model or "Unknown Vendor" / "Unidentified Hardware".
+        if resolution_status == "confirmed_candidate" && (confirmed_vendor.empty? || confirmed_model.empty?)
           return render json: { error: "confirmed_vendor and confirmed_model are required" }, status: :unprocessable_entity
+        elsif resolution_status == "saved_best_guess"
+          confirmed_vendor = params[:inferred_vendor].to_s.strip.presence || "Unknown Vendor" if confirmed_vendor.empty?
+          confirmed_model = params[:inferred_model].to_s.strip.presence || "Unidentified Hardware" if confirmed_model.empty?
         end
+
+        site = current_network_site(auto_create: false)
+        enrolled_device = if %w[confirmed_candidate saved_best_guess pivoted_to_barcode pivoted_to_manual].include?(resolution_status) &&
+                             confirmed_vendor.present? && confirmed_model.present?
+                            persist_confirmed_device_to_site(
+                              confirmed_vendor: confirmed_vendor,
+                              confirmed_model: confirmed_model,
+                              resolution_status: resolution_status,
+                              lifecycle_tier: params[:suggested_lifecycle_tier].presence || "active",
+                              trust_zone: params[:suggested_trust_zone].presence || "z1_trusted"
+                            )
+                          end
+
+        selected_rank = params[:selected_candidate_rank].present? ? params[:selected_candidate_rank].to_i : (resolution_status == "confirmed_candidate" ? 0 : nil)
 
         record = Discovery::HardwareVisionService.record_confirmation!(
           session_id: params[:session_id].presence || "tuesday-#{@client_platform}",
           client_platform: @client_platform,
           device_id: @device_id,
+          network_site_id: enrolled_device&.network_site_id || site&.id,
+          monitored_device_id: enrolled_device&.id,
           inferred_vendor: params[:inferred_vendor],
           inferred_model: params[:inferred_model],
           confirmed_vendor: confirmed_vendor,
           confirmed_model: confirmed_model,
           was_edited: ActiveModel::Type::Boolean.new.cast(params[:was_edited]) || false,
+          resolution_status: resolution_status,
+          selected_candidate_rank: selected_rank,
+          initial_mode: params[:initial_mode].presence || "photo_wizard",
+          final_mode: params[:final_mode].presence,
           extracted_identifiers: Array(params[:extracted_identifiers]),
+          user_clue_notes: Array(params[:user_clue_notes]),
           suggested_lifecycle_tier: params[:suggested_lifecycle_tier].presence || "active",
           suggested_trust_zone: params[:suggested_trust_zone].presence || "z1_trusted"
         )
 
-        enrolled_device = persist_confirmed_device_to_site(
-          confirmed_vendor: confirmed_vendor,
-          confirmed_model: confirmed_model,
-          lifecycle_tier: params[:suggested_lifecycle_tier].presence || "active",
-          trust_zone: params[:suggested_trust_zone].presence || "z1_trusted"
-        )
-
         render json: {
-          status: "confirmed",
+          status: resolution_status == "confirmed_candidate" ? "confirmed" : resolution_status,
+          resolutionStatus: record["resolutionStatus"],
           sessionId: record["sessionId"],
+          selectedCandidateRank: record["selectedCandidateRank"],
           confirmedVendor: record["confirmedVendor"],
           confirmedModel: record["confirmedModel"],
           wasEdited: record["wasEdited"],
+          needsCatalogReview: record["needsCatalogReview"],
           enrolledDevice: enrolled_device&.to_gold_hash,
           privacyAttestation: Discovery::HardwareVisionService::PRIVACY_ATTESTATION
         }
       end
+      alias_method :resolve, :confirm
 
       private
 
-      def persist_confirmed_device_to_site(confirmed_vendor:, confirmed_model:, lifecycle_tier:, trust_zone:)
+      def persist_confirmed_device_to_site(confirmed_vendor:, confirmed_model:, lifecycle_tier:, trust_zone:, resolution_status: "confirmed_candidate")
         return nil if ActiveModel::Type::Boolean.new.cast(params[:enroll]) == false
 
         site = current_network_site(auto_create: true)
@@ -166,12 +208,16 @@ module Api
         model_slug = confirmed_model.to_s.parameterize.presence || "device"
         ver = params[:version].presence || "1.0.0"
 
+        is_guess = (resolution_status == "saved_best_guess")
+        conf_tier = is_guess ? "provisional_guess" : "confirmed"
+        p_state = params[:port_state].presence || (is_guess ? "guessed" : "ok")
+
         device = site.monitored_devices.build(
           port_index: next_port,
           category_code: params[:category_code].presence || "C8",
           trust_zone: MonitoredDevice::VALID_TRUST_ZONES.include?(trust_zone) ? trust_zone : "z1_trusted",
-          port_state: params[:port_state].presence || "ok",
-          confidence_tier: "confirmed",
+          port_state: MonitoredDevice::VALID_PORT_STATES.include?(p_state) ? p_state : "ok",
+          confidence_tier: conf_tier,
           short_label: confirmed_model[0, 14],
           name: params[:name].presence || "#{confirmed_vendor} #{confirmed_model}".strip,
           vendor: confirmed_vendor,
@@ -181,6 +227,7 @@ module Api
           lifecycle_tier: MonitoredDevice::VALID_LIFECYCLE_TIERS.include?(lifecycle_tier) ? lifecycle_tier : "active"
         )
         device.purls_list = Array(params[:purls].presence || ["pkg:generic/#{vendor_slug}/#{model_slug}@#{ver}"])
+        device.candidate_models_list = Array(params[:candidate_models]) if params[:candidate_models].present?
         device.save ? device : nil
       end
 
