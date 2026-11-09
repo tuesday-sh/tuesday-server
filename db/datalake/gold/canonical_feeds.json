@@ -79,8 +79,7 @@
       "pkg:generic/ai-thinker/",
       "pkg:generic/wemos/",
       "pkg:generic/m5stack/",
-      "pkg:generic/quinled/",
-      "pkg:generic/sonoff/"
+      "pkg:generic/quinled/"
     ]
   },
   {
@@ -264,6 +263,7 @@
       "pkg:generic/home-assistant/",
       "pkg:generic/raspberry-pi/",
       "pkg:generic/smlight/",
+      "pkg:generic/sonoff/",
       "pkg:generic/philips-hue/",
       "pkg:generic/lutron/",
       "pkg:generic/sonos/",

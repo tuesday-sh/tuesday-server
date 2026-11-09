@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_11_08_220000) do
+ActiveRecord::Schema[7.2].define(version: 2026_11_08_233000) do
   create_table "api_keys", force: :cascade do |t|
     t.integer "bearer_id", null: false
     t.string "bearer_type", null: false
@@ -70,6 +70,22 @@ ActiveRecord::Schema[7.2].define(version: 2026_11_08_220000) do
     t.index ["canonical_feed_slug"], name: "index_curated_bulletins_on_canonical_feed_slug"
     t.index ["external_id"], name: "index_curated_bulletins_on_external_id", unique: true
     t.index ["purl_base"], name: "index_curated_bulletins_on_purl_base"
+  end
+
+  create_table "device_push_tokens", force: :cascade do |t|
+    t.integer "network_site_id", null: false
+    t.string "client_device_id", null: false
+    t.string "platform", default: "android", null: false
+    t.string "app_flavor", default: "tuesday", null: false
+    t.string "fcm_token"
+    t.boolean "critical_enabled", default: true, null: false
+    t.boolean "digest_enabled", default: true, null: false
+    t.datetime "last_seen_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["fcm_token"], name: "index_device_push_tokens_on_fcm_token"
+    t.index ["network_site_id", "client_device_id"], name: "idx_device_push_tokens_site_client", unique: true
+    t.index ["network_site_id"], name: "index_device_push_tokens_on_network_site_id"
   end
 
   create_table "discovery_sessions", force: :cascade do |t|
@@ -187,6 +203,34 @@ ActiveRecord::Schema[7.2].define(version: 2026_11_08_220000) do
     t.index ["user_id"], name: "index_network_sites_on_user_id"
   end
 
+  create_table "notification_deliveries", force: :cascade do |t|
+    t.integer "network_site_id", null: false
+    t.integer "monitored_device_id"
+    t.string "client_device_id", null: false
+    t.string "bulletin_external_id", null: false
+    t.string "feed_slug"
+    t.string "bulletin_type", default: "advisory", null: false
+    t.boolean "is_high_sev", default: false, null: false
+    t.boolean "broke_through_mute", default: false, null: false
+    t.boolean "matched_by_guess", default: false, null: false
+    t.string "delivery_channel", default: "tuesday_critical_bulletins", null: false
+    t.string "delivery_status", default: "pending", null: false
+    t.string "title", null: false
+    t.text "body", null: false
+    t.string "deep_link_uri", null: false
+    t.string "device_deep_link_uri"
+    t.text "payload_json"
+    t.datetime "sent_at"
+    t.datetime "delivered_at"
+    t.datetime "opened_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["client_device_id", "delivery_status"], name: "idx_notif_deliveries_client_status"
+    t.index ["monitored_device_id"], name: "index_notification_deliveries_on_monitored_device_id"
+    t.index ["network_site_id", "client_device_id", "bulletin_external_id"], name: "idx_notif_deliveries_unique_site_client_bulletin", unique: true
+    t.index ["network_site_id"], name: "index_notification_deliveries_on_network_site_id"
+  end
+
   create_table "product_telemetry_events", force: :cascade do |t|
     t.string "event_uuid", null: false
     t.string "event_name", null: false
@@ -224,5 +268,8 @@ ActiveRecord::Schema[7.2].define(version: 2026_11_08_220000) do
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
   end
 
+  add_foreign_key "device_push_tokens", "network_sites"
   add_foreign_key "monitored_devices", "network_sites"
+  add_foreign_key "notification_deliveries", "monitored_devices"
+  add_foreign_key "notification_deliveries", "network_sites"
 end

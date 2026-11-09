@@ -11,11 +11,11 @@ module DataLake
 
       result = DataLake::GoldSyncJob.perform_now
       assert_equal 21, result[:canonical_feeds_synced]
-      assert_equal 8, result[:curated_bulletins_synced]
+      assert_equal 14, result[:curated_bulletins_synced]
       assert_equal 34, result[:catalog_releases_synced]
 
       assert_equal 21, CanonicalFeed.count
-      assert_equal 8, CuratedBulletin.count
+      assert_equal 14, CuratedBulletin.count
       assert_equal 34, CatalogRelease.count
 
       kev = CuratedBulletin.find_by(external_id: "CVE-2026-21099")
@@ -26,7 +26,7 @@ module DataLake
       # Second run is idempotent (updates in-place without duplicating rows)
       DataLake::GoldSyncJob.perform_now
       assert_equal 21, CanonicalFeed.count
-      assert_equal 8, CuratedBulletin.count
+      assert_equal 14, CuratedBulletin.count
       assert_equal 34, CatalogRelease.count
     end
   end

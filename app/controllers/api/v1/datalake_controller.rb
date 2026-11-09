@@ -33,6 +33,7 @@ module Api
         synced_at = Time.now.utc.iso8601
 
         fleet_eval = evaluate_fleet_against_gold_bulletins
+        dispatch_summary = Notifications::FleetBulletinDispatcher.dispatch_for_all_sites!
 
         sync_record = {
           "sourcePipeline" => source_pipeline,
@@ -41,6 +42,7 @@ module Api
           "needsRefinementCount" => params[:needs_refinement_count]&.to_i,
           "refinedPlaybookIds" => refined_playbook_ids,
           "fleetEvaluation" => fleet_eval,
+          "notificationsQueued" => dispatch_summary[:notifications_queued],
           "syncedAt" => synced_at
         }
         self.class.last_sync_metadata = sync_record

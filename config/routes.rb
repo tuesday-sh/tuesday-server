@@ -25,6 +25,10 @@ Rails.application.routes.draw do
       get "telemetry/summary", to: "telemetry#summary"
       get "datalake/status", to: "datalake#status"
       post "datalake/sync", to: "datalake#sync"
+      post "notifications/register_token", to: "notifications#register_token"
+      post "notifications/dispatch", to: "notifications#dispatch_notifications"
+      get "notifications/pending", to: "notifications#pending"
+      post "notifications/:id/ack", to: "notifications#ack"
       post "billing/verify", to: "billing#verify"
     end
   end

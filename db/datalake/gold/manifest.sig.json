@@ -3,7 +3,7 @@
   "dag_version": "2.1.0",
   "schema_version": "2.0.0",
   "retention_policy": "US_10YR_TOMBSTONE_COMPACTION_15YR_IDENTITY",
-  "generated_at": "2026-11-09T01:36:10Z",
+  "generated_at": "2026-11-09T02:30:18Z",
   "enricher_provider": "elastix",
   "enricher_model": "gpt-oss-120b",
   "counts": {
@@ -15,17 +15,17 @@
     "curated_bulletins": 7481
   },
   "artifacts": {
-    "canonical_feeds.json": "sha256:0390b4dd72d6afe030e72dc77d43ee263b7d52f7ee35284a6966cba3f096e31b",
+    "canonical_feeds.json": "sha256:873d8124d05763bb86f08841302e2814bfe0ec763ec3f79ab68603634bfcebc6",
     "catalog_releases.json": "sha256:3b37367208872420e0a807abda5a924ec50a13f1fa8fc4a3eb16a98af3c99458",
-    "curated_bulletins.json": "sha256:4d6fbc55861a5dd0e57207d5025075f305ffcaff2b0bc7f3484d5dee19d42a18",
-    "confirmed_hardware_identifiers.json": "sha256:7a54cb2d58fff148094ae28f477768145ab2c23bea811c600118f1c34a57eea2",
-    "bq_matchable_products.jsonl": "sha256:14f3f8b0c9fb9585301d174b2ceecd6dc290195a812ce412484e199ba53d518d",
-    "bq_remediation_playbooks.jsonl": "sha256:0bbece85c50f75d2434a7e83d419b3250f7d455c9ab27fd8df969ffd0803bb4d",
-    "bq_curated_bulletins.jsonl": "sha256:9e896fd51cea36dd1448eef3abf4fdfebe31466268299a3b0741eebdd6c4d281",
+    "curated_bulletins.json": "sha256:3cda7dbd300ec89774505589b5372174fcd23482fcaf5ed7ed16b7b9a5963327",
+    "confirmed_hardware_identifiers.json": "sha256:06bcce7ab9e63549bb5e5cf3aeb5449c1475a2e38cabfcd4eb2fbf59bb349d33",
+    "bq_matchable_products.jsonl": "sha256:70243f07f5253e0b559ce6d7633bc56a2804ef1810052c5666d5343cf9cd1667",
+    "bq_remediation_playbooks.jsonl": "sha256:f3bc56cfaa1c0832603f3cf709e743f656d477b83f2881c0d786257d3fdf9fb5",
+    "bq_curated_bulletins.jsonl": "sha256:dbf144592e6f2f738c9ac117fd8b0b397f136d635efc6a24e95fed093f89eb1d",
     "deterministic_ingestion_dag.yaml": "sha256:8ec6c50e1fc1b4bf96b32219a68bf65b12f17f252179602f35ea7d2344947f67",
     "bulletin_refinement_dag.yaml": "sha256:530b8c7a524ba6de2db66cc96185db7667fb006c340e8cd6112f2657463b46cc"
   },
-  "manifest_digest": "sha256:22670857aa0367cc1e7ce29c4be1f33086833fecced666e8f68e431738bf1c24",
-  "released_at": "2026-11-09T02:17:24Z",
-  "release_notes": "Add 21 canonical feeds, C1-C8 catalog expansion, conditional Track 1 -> Track 2 trigger, and Cloud Scheduler sync"
+  "manifest_digest": "sha256:97e3e5b77ab225a0865be7517c07f2367f027568b0530743d509948e912a093f",
+  "released_at": "2026-11-09T02:30:19Z",
+  "release_notes": "Add 14 curated bulletins covering field-tested Pixel 9 hardware inventory"
 }

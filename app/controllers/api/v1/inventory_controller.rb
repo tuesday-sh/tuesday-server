@@ -45,10 +45,24 @@ module Api
           }, status: :unprocessable_entity
         end
 
+        ver = params[:version].presence || "1.0.0"
+        resolved_gold = Discovery::HardwareVisionService.resolve_gold_device_identity(
+          vendor: params[:vendor].to_s,
+          model: (params[:model_number].presence || params[:short_label]).to_s,
+          version: ver
+        )
+        raw_purls = Array(params[:purls]).map(&:to_s).reject { |p| p.start_with?("pkg:generic/enrolled/") }
+        effective_purls = raw_purls.presence || resolved_gold[:purls]
+        effective_cat = if params[:category_code].present? && params[:category_code] != "C6" && params[:category_code] != "C8"
+                          params[:category_code]
+                        else
+                          resolved_gold[:category_code].presence || params[:category_code].presence || "C8"
+                        end
+
         device = site.monitored_devices.build(
           external_uuid: params[:id].presence || SecureRandom.uuid,
           port_index: next_port,
-          category_code: params[:category_code].presence || "C8",
+          category_code: effective_cat,
           trust_zone: params[:trust_zone].presence || "z1_trusted",
           port_state: params[:port_state].presence || "ok",
           confidence_tier: params[:confidence_tier].presence || "confirmed",
@@ -58,11 +72,11 @@ module Api
           vendor: params[:vendor],
           model_number: params[:model_number],
           room_location: params[:room_location].presence || "Rack / Room",
-          version: params[:version].presence || "1.0.0",
+          version: ver,
           target_version: params[:target_version],
           lifecycle_tier: params[:lifecycle_tier].presence || "active"
         )
-        device.purls_list = Array(params[:purls]) if params[:purls].present?
+        device.purls_list = effective_purls
         device.candidate_models_list = Array(params[:candidate_models]) if params[:candidate_models].present?
         device.excluded_purl_prefixes_list = Array(params[:excluded_purl_prefixes]) if params[:excluded_purl_prefixes].present?
         device.version_history_list = Array(params[:version_history]) if params[:version_history].present?

@@ -204,17 +204,21 @@ module Api
         next_port = params[:port_index].present? ? params[:port_index].to_i : site.next_available_port_index
         return nil if next_port.nil? || next_port > NetworkSite::MAX_PORTS_M1
 
-        vendor_slug = confirmed_vendor.to_s.parameterize.presence || "generic"
-        model_slug = confirmed_model.to_s.parameterize.presence || "device"
         ver = params[:version].presence || "1.0.0"
+        resolved_gold = Discovery::HardwareVisionService.resolve_gold_device_identity(
+          vendor: confirmed_vendor,
+          model: confirmed_model,
+          version: ver
+        )
 
         is_guess = (resolution_status == "saved_best_guess")
         conf_tier = is_guess ? "provisional_guess" : "confirmed"
         p_state = params[:port_state].presence || (is_guess ? "guessed" : "ok")
+        resolved_category = params[:category_code].presence || resolved_gold[:category_code] || "C8"
 
         device = site.monitored_devices.build(
           port_index: next_port,
-          category_code: params[:category_code].presence || "C8",
+          category_code: resolved_category,
           trust_zone: MonitoredDevice::VALID_TRUST_ZONES.include?(trust_zone) ? trust_zone : "z1_trusted",
           port_state: MonitoredDevice::VALID_PORT_STATES.include?(p_state) ? p_state : "ok",
           confidence_tier: conf_tier,
@@ -226,8 +230,8 @@ module Api
           version: ver,
           lifecycle_tier: MonitoredDevice::VALID_LIFECYCLE_TIERS.include?(lifecycle_tier) ? lifecycle_tier : "active"
         )
-        device.purls_list = Array(params[:purls].presence || ["pkg:generic/#{vendor_slug}/#{model_slug}@#{ver}"])
-        device.candidate_models_list = Array(params[:candidate_models]) if params[:candidate_models].present?
+        device.purls_list = Array(params[:purls].presence || resolved_gold[:purls])
+        device.candidate_models_list = Array(params[:candidate_models].presence || (is_guess ? [confirmed_model] : []))
         device.save ? device : nil
       end
 

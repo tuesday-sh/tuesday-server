@@ -595,6 +595,42 @@ module Discovery
         )
       end
 
+      def resolve_gold_device_identity(vendor:, model:, version: "1.0.0")
+        audited = audit_candidates_against_gold_datalake([
+          {
+            "manufacturer" => vendor.to_s,
+            "modelNumber" => model.to_s,
+            "displayName" => "#{vendor} #{model}".strip,
+            "suggestedOsDetails" => ""
+          }
+        ]).first || {}
+
+        alignment = audited["goldAlignment"] || {}
+        primary_purl_base = alignment["inferredPurl"].presence || infer_candidate_purl(vendor: vendor.to_s, model: model.to_s)
+        ver = version.presence || "1.0.0"
+
+        purls = ["#{primary_purl_base}@#{ver}"]
+
+        # Also include slash-variant PURLs (e.g. "MB7420 / MB7621 / MB8600" -> mb7420, mb7621, mb8600)
+        # so multi-model family picks match bulletins on any member SKU in that family.
+        idx_map = confirmed_catalog_index
+        vendor_slug = vendor.to_s.split(/\s*\/\s*/).first.to_s.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "").presence || "generic"
+        extract_candidate_model_slugs(model.to_s).each do |c_slug|
+          matched = idx_map[:by_purl]["pkg:generic/#{vendor_slug}/#{c_slug}"] ||
+                    (c_slug.length >= 3 && idx_map[:by_model_slug][c_slug])
+          if matched && matched["canonical_purl"].present?
+            purls << "#{matched['canonical_purl']}@#{ver}"
+          end
+        end
+
+        {
+          purls: purls.uniq,
+          category_code: alignment["categoryCode"].presence || "C8",
+          matched_feed_slug: alignment["matchedFeedSlug"],
+          aligned: !!alignment["aligned"]
+        }
+      end
+
       CATEGORY_CODE_LABELS = {
         "C1" => "C1 • Power / UPS",
         "C2" => "C2 • WAN / Modem",
