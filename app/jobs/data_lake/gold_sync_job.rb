@@ -16,17 +16,57 @@ module DataLake
       feeds_synced = sync_canonical_feeds(resolved_dir, now)
       bulletins_synced = sync_curated_bulletins(resolved_dir, now)
       releases_synced = sync_catalog_releases(resolved_dir, now)
+      hardware_synced = sync_hardware_catalog(resolved_dir, now)
 
       {
         lake_dir: resolved_dir,
         canonical_feeds_synced: feeds_synced,
         curated_bulletins_synced: bulletins_synced,
         catalog_releases_synced: releases_synced,
+        hardware_items_synced: hardware_synced,
         synced_at: now.utc.iso8601
       }
     end
 
     private
+
+    def sync_hardware_catalog(lake_dir, now)
+      path = File.join(lake_dir, "confirmed_hardware_identifiers.json")
+      return 0 unless File.exist?(path)
+
+      payload = JSON.parse(File.read(path))
+      identifiers = payload["identifiers"] || []
+
+      items_to_upsert = identifiers.map do |row|
+        {
+          canonical_purl: row["canonical_purl"],
+          vendor: row["vendor"] || "Unknown",
+          brand: row["brand"],
+          model: row["model"] || "Unknown",
+          display_name: row["display_name"],
+          category_code: row["category_code"] || "C8",
+          upc_gtin: row["upc_gtin"],
+          fcc_id: row["fcc_id"],
+          fcc_grantee: row["fcc_grantee"],
+          lifecycle_tier: row["lifecycle_tier"] || "active",
+          match_tier: row["match_tier"] || "EXACT_SKU_AND_UPC",
+          aliases: JSON.generate(Array(row["aliases"])),
+          specs_metadata: JSON.generate(row["specs_metadata"] || {}),
+          created_at: now,
+          updated_at: now
+        }
+      end
+
+      return 0 if items_to_upsert.empty?
+
+      HardwareCatalogItem.upsert_all(
+        items_to_upsert,
+        unique_by: :canonical_purl,
+        update_only: %i[vendor brand model display_name category_code upc_gtin fcc_id fcc_grantee lifecycle_tier match_tier aliases specs_metadata updated_at]
+      )
+
+      items_to_upsert.size
+    end
 
     def sync_canonical_feeds(lake_dir, now)
       path = File.join(lake_dir, "canonical_feeds.json")

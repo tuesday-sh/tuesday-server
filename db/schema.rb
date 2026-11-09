@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_11_08_233000) do
+ActiveRecord::Schema[7.2].define(version: 2026_11_09_180000) do
   create_table "api_keys", force: :cascade do |t|
     t.integer "bearer_id", null: false
     t.string "bearer_type", null: false
@@ -158,6 +158,29 @@ ActiveRecord::Schema[7.2].define(version: 2026_11_08_233000) do
     t.index ["discovery_session_id"], name: "index_discovery_turns_on_discovery_session_id"
     t.index ["routing_tier"], name: "index_discovery_turns_on_routing_tier"
     t.index ["session_id", "turn_index"], name: "index_discovery_turns_on_session_id_and_turn_index"
+  end
+
+  create_table "hardware_catalog_items", force: :cascade do |t|
+    t.string "canonical_purl", null: false
+    t.string "vendor", null: false
+    t.string "brand"
+    t.string "model", null: false
+    t.string "display_name"
+    t.string "category_code", default: "C8", null: false
+    t.string "upc_gtin"
+    t.string "fcc_id"
+    t.string "fcc_grantee"
+    t.string "lifecycle_tier", default: "active"
+    t.string "match_tier", default: "EXACT_SKU_AND_UPC"
+    t.text "aliases", default: "[]", null: false
+    t.text "specs_metadata", default: "{}", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["canonical_purl"], name: "index_hardware_catalog_items_on_canonical_purl", unique: true
+    t.index ["category_code"], name: "index_hardware_catalog_items_on_category_code"
+    t.index ["fcc_id"], name: "index_hardware_catalog_items_on_fcc_id"
+    t.index ["upc_gtin"], name: "index_hardware_catalog_items_on_upc_gtin"
+    t.index ["vendor", "model"], name: "index_hardware_catalog_items_on_vendor_and_model"
   end
 
   create_table "monitored_devices", force: :cascade do |t|
