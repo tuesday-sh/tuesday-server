@@ -500,8 +500,8 @@ module Discovery
                                                       else initial_mode.presence || "photo_wizard"
                                                       end)
 
-        # Only promote identifiers into the Gold Confirmed Catalog when the user explicitly confirmed a candidate
-        if norm_status == "confirmed_candidate" && clean_identifiers.any? && !confirmed_vendor.to_s.strip.empty? && !confirmed_model.to_s.strip.empty?
+        # Only promote identifiers into the Gold Confirmed Catalog when the user explicitly confirmed a candidate (and not a synthetic_sample test graphic)
+        if norm_status == "confirmed_candidate" && initial_mode.to_s != "synthetic_sample" && clean_identifiers.any? && !confirmed_vendor.to_s.strip.empty? && !confirmed_model.to_s.strip.empty?
           promote_confirmed_identifiers(
             identifiers: clean_identifiers,
             vendor: confirmed_vendor.to_s.strip,
