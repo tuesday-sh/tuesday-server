@@ -236,11 +236,23 @@ module Discovery
                 provider_used = "Elastix"
                 model_used = res_data[:model]
                 elastix_top_conf = result["confidence"] || ((Array(result["candidates"]).first&.dig("confidencePercent") || 0).to_f / 100.0)
-                trace.call("LLM_OK", "Elastix #{model_used} responded (conf=#{(elastix_top_conf * 100).round}% in=#{usage[:input_tokens]} out=#{usage[:output_tokens]} cached=#{usage[:cache_read_tokens]} tokens)")
+                elastix_multi_device = !!result["multipleDevicesDetected"]
+                elastix_has_exact_id = %w[modelNumber serialNumber barcode].any? do |k|
+                  result.dig("extractedIdentifiersObject", k).to_s.strip.present?
+                end
+                trace.call("LLM_OK", "Elastix #{model_used} responded (conf=#{(elastix_top_conf * 100).round}% multi_device=#{elastix_multi_device} in=#{usage[:input_tokens]} out=#{usage[:output_tokens]} cached=#{usage[:cache_read_tokens]} tokens)")
 
-                # Escalate to GCP Gemini Flash when Elastix confidence < 0.65 (e.g. rotated PCB stickers, embossed text, or multi-device cabinets)
-                if elastix_top_conf < 0.65 && ENV["GEMINI_API_KEY"].to_s.strip.present? && provider_override.to_s.downcase == "auto"
-                  trace.call("LLM_ESCALATE", "Elastix top confidence #{(elastix_top_conf * 100).round}% < 65% threshold -> escalating to GCP Gemini Flash")
+                # Escalate to GCP Gemini Flash when:
+                # 1) Elastix confidence < 0.65 (e.g. rotated PCB stickers, embossed text), OR
+                # 2) Multiple chassis are detected in frame without an exact label identifier (preventing peripheral familiarity bias)
+                should_escalate = (elastix_top_conf < 0.65) || (elastix_multi_device && !elastix_has_exact_id)
+                if should_escalate && ENV["GEMINI_API_KEY"].to_s.strip.present? && provider_override.to_s.downcase == "auto"
+                  esc_reason = if elastix_multi_device && !elastix_has_exact_id && elastix_top_conf >= 0.65
+                                 "multiple devices in frame without exact label identifier (conf=#{(elastix_top_conf * 100).round}%)"
+                               else
+                                 "Elastix top confidence #{(elastix_top_conf * 100).round}% < 65% threshold"
+                               end
+                  trace.call("LLM_ESCALATE", "#{esc_reason} -> escalating to GCP Gemini Flash")
                   begin
                     gem_data = call_gemini_interactions(
                       turn_index: turn_index,
@@ -256,17 +268,19 @@ module Discovery
                       cache_read_tokens: usage[:cache_read_tokens].to_i + gem_data[:usage][:cache_read_tokens].to_i
                     }
                     fallback_used = true
-                    if gem_conf >= elastix_top_conf
+                    if (elastix_multi_device && !elastix_has_exact_id) || gem_conf >= elastix_top_conf
                       result = gem_res
+                      result["multipleDevicesDetected"] = true if elastix_multi_device
+                      result["multiDeviceWarning"] ||= MULTI_DEVICE_WARNING_MESSAGE if result["multipleDevicesDetected"]
                       raw_llm_response = gem_data[:raw_text]
                       provider_used = "Google"
                       model_used = gem_data[:model]
-                      trace.call("LLM_OK", "Gemini escalation #{model_used} improved confidence to #{(gem_conf * 100).round}%")
+                      trace.call("LLM_OK", "Gemini escalation #{model_used} selected (conf=#{(gem_conf * 100).round}% multi_device=#{result['multipleDevicesDetected']})")
                     else
                       trace.call("LLM_OK", "Gemini escalation returned #{(gem_conf * 100).round}%; retaining Elastix result (#{(elastix_top_conf * 100).round}%)")
                     end
                   rescue StandardError => esc_err
-                    trace.call("LLM_WARN", "Gemini low-confidence escalation skipped (#{esc_err.message}); retaining Elastix result")
+                    trace.call("LLM_WARN", "Gemini escalation skipped (#{esc_err.message}); retaining Elastix result")
                   end
                 end
               rescue StandardError => elastix_err
@@ -479,6 +493,8 @@ module Discovery
           "recommendedClueTypes" => result["recommendedClueTypes"] || DEFAULT_CLUE_TYPES,
           "extractedIdentifiersObject" => result["extractedIdentifiersObject"] || normalized_clues[:object],
           "extractedIdentifiers" => normalized_clues[:flat_list],
+          "multipleDevicesDetected" => !!result["multipleDevicesDetected"],
+          "multiDeviceWarning" => result["multiDeviceWarning"],
           "candidates" => audited_candidates,
           # Top-level summary, coaching & telemetry fields
           "vendor" => top_vendor,
@@ -1081,15 +1097,18 @@ module Discovery
           /no_think
           You are a hardware device inventory discovery assistant for Tuesday.sh running on Elastix.ai.
           LATENCY CRITICAL: Keep internal thinking/reasoning under 25 words. Do NOT over-deliberate. Output the JSON object immediately with concise 1-sentence fields.
-          MULTI-DEVICE & PCB RULES:
-          - If multiple distinct hardware devices are visible in one photo (e.g. a network switch AND Raspberry Pi SBCs in a wall cabinet), list each distinct device as its own entry in "candidates" (up to 3) with your best specific "modelNumber" estimate (e.g. "WS-C2960-8TC-L", "RPi-4B", "RPi-3B+" — never "unknown").
+          SPATIAL SALIENCE, VISUAL POINTERS & MULTI-DEVICE RULES:
+          - PRIMARY SUBJECT RULE (CENTER OF FRAME & ARROWS): Always prioritize the device at the CENTER/FOREGROUND of the photo or explicitly indicated by a visual pointer (red arrow, circle, bounding box, or finger). Candidate #1 (rank 0) MUST identify that primary central/pointed-to device—NEVER rank a background or edge device #1 just because its LEDs or brand logo are easier to recognize.
+          - NO CROSS-CHASSIS FEATURE BLEEDING OR REFLECTION CONFUSION: Never merge ports, LEDs, or logos from an adjacent peripheral chassis (e.g. a NAS on the left edge) or a mirrored reflection on a glossy side panel onto the central device.
+          - Set "multipleDevicesDetected": true whenever 2 or more distinct physical hardware chassis/units are visible in the photo. List the central/annotated device as Candidate #1 and any peripheral/adjacent device as Candidate #2/#3 with spatial tags in displayName (e.g. "[Center / Arrow] ...", "[Left Edge] ...").
           - Inspect rotated/vertical module stickers, FCC IDs, silkscreened board numbers, and SBC/PCB layouts carefully.
           Return ONLY a valid JSON object with the exact following keys:
           - "visualSummary": concise 1-sentence summary of all hardware devices and clues visible
-          - "nextNarrowingQuestion": concise question asking for Barcode, Serial Number, QR Code, Model, or MAC Address
+          - "multipleDevicesDetected": boolean (true if 2+ distinct hardware chassis/enclosures are visible in the frame)
+          - "nextNarrowingQuestion": concise question asking for Barcode, Serial Number, QR Code, Model, or MAC Address of the central target device
           - "recommendedClueTypes": array of strings from ["Model", "MAC Address", "Serial Number", "Barcode", "QR Code"]
           - "extractedIdentifiers": object with string or null fields {"barcode", "serialNumber", "qrCode", "modelNumber", "macAddress"}
-          - "candidates": array of up to 3 objects (distinct devices visible in frame or top model candidates), each with exact keys:
+          - "candidates": array of up to 3 objects (Candidate #1 MUST be the central/pointed-to device), each with exact keys:
             - "manufacturer": string
             - "modelNumber": string
             - "displayName": string
@@ -1176,11 +1195,14 @@ module Discovery
 
         prompt_text = <<~PROMPT.strip
           <instructions>
-          You are a hardware device inventory discovery assistant for Tuesday.sh (a home lab, router, switch, NAS, SBC, and IoT package/firmware telemetry platform).
+          You are a hardware device inventory discovery assistant for Tuesday.sh (a home lab, router, switch, NAS, SBC, Mini PC, and IoT package/firmware telemetry platform).
           Analyze the attached hardware device photo(s) along with any user-supplied identifiers (barcode, serial number, QR code, model number, or MAC address).
-          1. Extract any visible Barcode, Serial Number, QR Code payload, FCC ID, Model Number, or MAC Address from the photo(s) (including rotated/vertical daughterboard or mini-PCIe stickers and PCB silkscreen markings) or user clues.
-          2. Rank up to 3 candidate hardware devices (fields: manufacturer, modelNumber, displayName, deviceCategory, confidencePercent 1-99, reasoning, suggestedHostname, suggestedOsDetails, suggestedPackageManager from [apt, apk, brew, yum, docker, hacs, firmware]). If multiple distinct devices are visible in one enclosure/cabinet photo (e.g., a switch plus Raspberry Pi SBCs), include each distinct device in `candidates`.
-          3. Formulate a concise `nextNarrowingQuestion` asking the user if there is a Barcode, Serial Number, QR Code, Model, or MAC Address on the device/sticker that can disambiguate the top candidates.
+          1. PRIMARY SUBJECT & VISUAL POINTER RULE: Always identify the device that occupies the CENTER/FOREGROUND of the photo or is explicitly indicated by a user annotation (drawn red arrow, circle, box, or finger). Candidate #1 (rank 0) MUST be that central/annotated device—NEVER rank a peripheral/background device #1 just because its LEDs or branding are easier to recognize!
+          2. ANTI-CONTAMINATION & REFLECTION RULE: Do NOT blend features (ports, LEDs, form factor) from an adjacent peripheral chassis (such as a cropped Synology NAS on the left edge) or a backwards mirrored reflection on a glossy side panel (such as a reflected logo from an adjacent drive enclosure) onto the central device. For example, a slim vertical box with Wi-Fi + POWER LEDs, front USB-A, USB-C, and a 3.5mm audio jack is a Mini PC / Thin Client / USB-C Dock, NOT a NAS sitting beside it.
+          3. MULTI-DEVICE DETECTION: Set `multipleDevicesDetected` to `true` whenever 2 or more distinct physical hardware chassis/units are visible in the photo. Prefix each candidate's `displayName` with its spatial location (e.g., `[Center / Arrow] ...`, `[Left Edge] ...`).
+          4. Extract any visible Barcode, Serial Number, QR Code payload, FCC ID, Model Number, or MAC Address from the photo(s) (including rotated/vertical daughterboard stickers and PCB silkscreen markings) or user clues.
+          5. Rank up to 3 candidate hardware devices (fields: manufacturer, modelNumber, displayName, deviceCategory, confidencePercent 1-99, reasoning, suggestedHostname, suggestedOsDetails, suggestedPackageManager from [apt, apk, brew, yum, docker, hacs, firmware]).
+          6. Formulate a concise `nextNarrowingQuestion` asking the user for the Barcode, Serial Number, Model, or MAC Address of the central target device.
           </instructions>
           <accumulated_clues>
           Turn #{turn_index}:
@@ -1273,6 +1295,7 @@ module Discovery
           "type" => "object",
           "properties" => {
             "visualSummary" => { "type" => "string" },
+            "multipleDevicesDetected" => { "type" => "boolean" },
             "nextNarrowingQuestion" => { "type" => "string" },
             "recommendedClueTypes" => {
               "type" => "array",
@@ -1307,9 +1330,11 @@ module Discovery
               }
             }
           },
-          "required" => %w[visualSummary nextNarrowingQuestion recommendedClueTypes extractedIdentifiers candidates]
+          "required" => %w[visualSummary multipleDevicesDetected nextNarrowingQuestion recommendedClueTypes extractedIdentifiers candidates]
         }
       end
+
+      MULTI_DEVICE_WARNING_MESSAGE = "Multiple devices detected in this photo. Confidence can be lower when neighboring chassis appear in frame — for best results, snap a new photo framed around a single device."
 
       def parse_turn_json(raw_text, clues)
         cleaned = raw_text.to_s.strip
@@ -1347,9 +1372,18 @@ module Discovery
           }
         end
 
+        vis_summary = json["visualSummary"].presence || "Analyzed device hardware."
+        multi_detected = if json.key?("multipleDevicesDetected")
+                           !!json["multipleDevicesDetected"]
+                         else
+                           vis_summary.match?(/\b(beside|next to|alongside|second |multiple |left unit|right unit|two .*chassis|two .*devices)\b/i)
+                         end
+
         top = candidates.first || {}
         {
-          "visualSummary" => json["visualSummary"].presence || "Analyzed device hardware.",
+          "visualSummary" => vis_summary,
+          "multipleDevicesDetected" => multi_detected,
+          "multiDeviceWarning" => multi_detected ? MULTI_DEVICE_WARNING_MESSAGE : nil,
           "nextNarrowingQuestion" => json["nextNarrowingQuestion"].presence || "Can you check for a Barcode, Serial Number, Model, or MAC Address on the label?",
           "recommendedClueTypes" => Array(json["recommendedClueTypes"]).presence || DEFAULT_CLUE_TYPES,
           "extractedIdentifiersObject" => merged_obj,
@@ -1357,7 +1391,7 @@ module Discovery
           "vendor" => top["manufacturer"] || json["vendor"] || "Unknown Vendor",
           "model" => top["modelNumber"] || json["model"] || "Unidentified Hardware",
           "confidence" => ((top["confidencePercent"] || 70).to_f / 100.0).round(2),
-          "reasoning" => top["reasoning"] || json["visualSummary"],
+          "reasoning" => top["reasoning"] || vis_summary,
           "nextPromptForUser" => json["nextNarrowingQuestion"]
         }
       end

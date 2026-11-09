@@ -257,4 +257,48 @@ class HardwareVisionServiceTest < Minitest::Test
     assert_equal false, res_mod["shortCircuited"]
     assert res_mod["extractedIdentifiers"].any? { |c| c.include?("Embedded Radio Module") && c.include?("ESP32") }
   end
+
+  def test_multi_device_detection_and_confidence_warning
+    raw_json = JSON.generate({
+      "visualSummary" => "A compact Mini PC indicated by a red arrow sits beside a 2-bay Synology NAS on the left.",
+      "multipleDevicesDetected" => true,
+      "nextNarrowingQuestion" => "Can you share the model number from the label on the central Mini PC?",
+      "recommendedClueTypes" => ["Model", "Serial Number"],
+      "extractedIdentifiers" => { "barcode" => nil, "serialNumber" => nil, "qrCode" => nil, "modelNumber" => nil, "macAddress" => nil },
+      "candidates" => [
+        {
+          "manufacturer" => "Minisforum",
+          "modelNumber" => "Mini PC",
+          "displayName" => "[Center / Arrow] Compact Mini PC",
+          "deviceCategory" => "Mini PC",
+          "confidencePercent" => 75,
+          "reasoning" => "Central device pointed to by red arrow.",
+          "suggestedHostname" => "mini-pc",
+          "suggestedOsDetails" => "Linux",
+          "suggestedPackageManager" => "apt"
+        },
+        {
+          "manufacturer" => "Synology",
+          "modelNumber" => "DS220+",
+          "displayName" => "[Left Edge] Synology 2-Bay NAS",
+          "deviceCategory" => "NAS",
+          "confidencePercent" => 90,
+          "reasoning" => "Peripheral 2-bay NAS on the left edge.",
+          "suggestedHostname" => "synology-nas",
+          "suggestedOsDetails" => "Synology DSM",
+          "suggestedPackageManager" => "firmware"
+        }
+      ]
+    })
+
+    parsed = Discovery::HardwareVisionService.send(
+      :parse_turn_json,
+      raw_json,
+      { object: {}, flat_list: [] }
+    )
+    assert_equal true, parsed["multipleDevicesDetected"]
+    assert_includes parsed["multiDeviceWarning"], "Multiple devices detected in this photo"
+    assert_equal "Minisforum", parsed["vendor"]
+    assert_equal "[Center / Arrow] Compact Mini PC", parsed["candidates"].first["displayName"]
+  end
 end
