@@ -22,8 +22,10 @@
     "bq_matchable_products.jsonl": "sha256:14f3f8b0c9fb9585301d174b2ceecd6dc290195a812ce412484e199ba53d518d",
     "bq_remediation_playbooks.jsonl": "sha256:0bbece85c50f75d2434a7e83d419b3250f7d455c9ab27fd8df969ffd0803bb4d",
     "bq_curated_bulletins.jsonl": "sha256:9e896fd51cea36dd1448eef3abf4fdfebe31466268299a3b0741eebdd6c4d281",
-    "deterministic_ingestion_dag.yaml": "sha256:fd4331620ce9e36165f70a160c2bb590adb5df207b2ee27d17c6a37271e51055",
-    "bulletin_refinement_dag.yaml": "sha256:2c5d6f7bf681089056650e4fe0d87a54a653c40b32b40fb7eecbc7d8a0b3a2c3"
+    "deterministic_ingestion_dag.yaml": "sha256:8ec6c50e1fc1b4bf96b32219a68bf65b12f17f252179602f35ea7d2344947f67",
+    "bulletin_refinement_dag.yaml": "sha256:530b8c7a524ba6de2db66cc96185db7667fb006c340e8cd6112f2657463b46cc"
   },
-  "manifest_digest": "sha256:22670857aa0367cc1e7ce29c4be1f33086833fecced666e8f68e431738bf1c24"
+  "manifest_digest": "sha256:22670857aa0367cc1e7ce29c4be1f33086833fecced666e8f68e431738bf1c24",
+  "released_at": "2026-11-09T02:17:24Z",
+  "release_notes": "Add 21 canonical feeds, C1-C8 catalog expansion, conditional Track 1 -> Track 2 trigger, and Cloud Scheduler sync"
 }

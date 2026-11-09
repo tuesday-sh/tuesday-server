@@ -23,6 +23,8 @@ Rails.application.routes.draw do
       get "discovery/sessions", to: "discovery#sessions"
       post "telemetry/events", to: "telemetry#create"
       get "telemetry/summary", to: "telemetry#summary"
+      get "datalake/status", to: "datalake#status"
+      post "datalake/sync", to: "datalake#sync"
       post "billing/verify", to: "billing#verify"
     end
   end
