@@ -73,7 +73,14 @@
     "purl_prefixes": [
       "pkg:generic/lg/webos",
       "pkg:generic/lg-webos/",
-      "pkg:generic/esphome/"
+      "pkg:generic/esphome/",
+      "pkg:generic/espressif/",
+      "pkg:generic/nodemcu/",
+      "pkg:generic/ai-thinker/",
+      "pkg:generic/wemos/",
+      "pkg:generic/m5stack/",
+      "pkg:generic/quinled/",
+      "pkg:generic/sonoff/"
     ]
   },
   {

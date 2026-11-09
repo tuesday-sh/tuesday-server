@@ -3,11 +3,11 @@
   "dag_version": "2.1.0",
   "schema_version": "2.0.0",
   "retention_policy": "US_10YR_TOMBSTONE_COMPACTION_15YR_IDENTITY",
-  "generated_at": "2026-11-09T01:26:02Z",
+  "generated_at": "2026-11-09T01:36:10Z",
   "enricher_provider": "elastix",
   "enricher_model": "gpt-oss-120b",
   "counts": {
-    "matchable_products": 10039,
+    "matchable_products": 10065,
     "fcc_grantees": 170,
     "canonical_feeds": 21,
     "catalog_releases": 34,
@@ -15,15 +15,15 @@
     "curated_bulletins": 7481
   },
   "artifacts": {
-    "canonical_feeds.json": "sha256:09eaea85d4efd831c6afda9fade74df3600f0c3165e733726384ee7dd9b2ba1f",
+    "canonical_feeds.json": "sha256:0390b4dd72d6afe030e72dc77d43ee263b7d52f7ee35284a6966cba3f096e31b",
     "catalog_releases.json": "sha256:3b37367208872420e0a807abda5a924ec50a13f1fa8fc4a3eb16a98af3c99458",
     "curated_bulletins.json": "sha256:4d6fbc55861a5dd0e57207d5025075f305ffcaff2b0bc7f3484d5dee19d42a18",
-    "confirmed_hardware_identifiers.json": "sha256:4e24f19e7f968410f5db666c5c22aa2cf90a9e59ca642955016624c9774c46b4",
-    "bq_matchable_products.jsonl": "sha256:39b30a745fa99379df88a1bdbbb1ed6b40ab6d9d3166ca342fa994ffbd84ccef",
-    "bq_remediation_playbooks.jsonl": "sha256:091d52319db9745791689d1e401eecfcf0a4892e8d6961bdd9ebd79900123129",
-    "bq_curated_bulletins.jsonl": "sha256:b3f4e1491890b0a735bf3d22ec54705049ad61fc6d1bb47e02207f541fa80bd3",
+    "confirmed_hardware_identifiers.json": "sha256:7a54cb2d58fff148094ae28f477768145ab2c23bea811c600118f1c34a57eea2",
+    "bq_matchable_products.jsonl": "sha256:14f3f8b0c9fb9585301d174b2ceecd6dc290195a812ce412484e199ba53d518d",
+    "bq_remediation_playbooks.jsonl": "sha256:0bbece85c50f75d2434a7e83d419b3250f7d455c9ab27fd8df969ffd0803bb4d",
+    "bq_curated_bulletins.jsonl": "sha256:9e896fd51cea36dd1448eef3abf4fdfebe31466268299a3b0741eebdd6c4d281",
     "deterministic_ingestion_dag.yaml": "sha256:fd4331620ce9e36165f70a160c2bb590adb5df207b2ee27d17c6a37271e51055",
     "bulletin_refinement_dag.yaml": "sha256:2c5d6f7bf681089056650e4fe0d87a54a653c40b32b40fb7eecbc7d8a0b3a2c3"
   },
-  "manifest_digest": "sha256:7307072665d9c15f96fd6e2022f78fa82a50a4e507d24fd93c0a4bbda22db3e0"
+  "manifest_digest": "sha256:22670857aa0367cc1e7ce29c4be1f33086833fecced666e8f68e431738bf1c24"
 }

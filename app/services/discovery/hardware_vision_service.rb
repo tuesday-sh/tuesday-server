@@ -1451,6 +1451,10 @@ module Discovery
         return [] if raw.empty?
 
         parts = [raw] + raw.split(/\s*(?:\/|,|\bor\b)\s*/i)
+        # Also extract embedded chip/board tokens like ESP8266, ESP8266MOD, ESP32, RPi-4B, etc.
+        raw.scan(/\b(esp8266(?:mod)?|esp32(?:-[a-z0-9]+)?|esp-12[ef]|nodemcu|d1-mini)\b/i).flatten.each do |tok|
+          parts << tok
+        end
         slugs = []
         parts.each do |part|
           cleaned_part = part.sub(/\b(series|family|line|models?)\b/i, "").strip
