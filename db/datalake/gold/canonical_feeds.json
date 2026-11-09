@@ -238,7 +238,13 @@
       "pkg:generic/debian/",
       "pkg:generic/redhat/",
       "pkg:generic/rocky-linux/",
-      "pkg:generic/alpine-linux/"
+      "pkg:generic/alpine-linux/",
+      "pkg:generic/intel/",
+      "pkg:generic/hp/",
+      "pkg:generic/dell/",
+      "pkg:generic/lenovo/",
+      "pkg:generic/beelink/",
+      "pkg:generic/minisforum/"
     ]
   },
   {

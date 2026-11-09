@@ -1438,11 +1438,45 @@ module Discovery
         }
       end
 
+      def normalize_model_slug(raw_model)
+        raw_model.to_s
+                 .downcase
+                 .gsub("+", "-plus")
+                 .gsub(/[^a-z0-9]+/, "-")
+                 .gsub(/\A-+|-+\z/, "")
+      end
+
+      def extract_candidate_model_slugs(raw_model)
+        raw = raw_model.to_s.strip
+        return [] if raw.empty?
+
+        parts = [raw] + raw.split(/\s*(?:\/|,|\bor\b)\s*/i)
+        slugs = []
+        parts.each do |part|
+          cleaned_part = part.sub(/\b(series|family|line|models?)\b/i, "").strip
+          next if cleaned_part.empty?
+
+          norm = normalize_model_slug(cleaned_part)
+          plain = cleaned_part.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
+          [norm, plain].each do |s|
+            next if s.length < 2
+            next if %w[device unknown unknown-model unidentified-hardware generic mini-pc router switch nas modem].include?(s)
+
+            slugs << s
+            base = s.sub(/-(100nas|200nas|us|eu|uk|au|ca|v\d+)\z/, "")
+            slugs << base if base.length >= 2
+          end
+        end
+        slugs.uniq
+      end
+
       def infer_candidate_purl(vendor:, model:, os_details: "")
-        v_down = vendor.to_s.downcase
-        m_down = model.to_s.downcase
+        primary_vendor = vendor.to_s.split(/\s*\/\s*/).first.to_s.strip
+        primary_model = model.to_s.split(/\s*\/\s*/).first.to_s.strip
+        v_down = primary_vendor.downcase
+        m_down = primary_model.downcase
         os_down = os_details.to_s.downcase
-        m_slug = m_down.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "").presence || "device"
+        m_slug = normalize_model_slug(primary_model).presence || "device"
         v_slug = v_down.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "").presence || "generic"
         has_specific_model = !%w[device unknown unknown-model unidentified-hardware].include?(m_slug)
 
@@ -1454,7 +1488,7 @@ module Discovery
           end
         elsif v_down.include?("netgear") || m_down.include?("r7000") || m_down.include?("nighthawk")
           "pkg:generic/netgear/#{m_slug}"
-        elsif v_down.include?("synology") || os_down.include?("dsm")
+        elsif v_down.include?("synology") || (v_down.empty? && os_down.include?("dsm"))
           has_specific_model ? "pkg:generic/synology/#{m_slug}" : "pkg:generic/synology/dsm"
         elsif v_down.include?("cisco")
           has_specific_model ? "pkg:generic/cisco/#{m_slug}" : "pkg:generic/cisco/ios-xe"
@@ -1462,7 +1496,7 @@ module Discovery
           "pkg:generic/ecobee/#{m_slug}"
         elsif v_down.include?("owlet")
           "pkg:generic/owlet/#{m_slug}"
-        elsif v_down.include?("lg") || os_down.include?("webos")
+        elsif v_down.include?("lg") || (v_down.empty? && os_down.include?("webos"))
           "pkg:generic/lg/webos"
         elsif v_down.include?("esphome") || os_down.include?("esphome")
           "pkg:generic/esphome/firmware"
@@ -1470,8 +1504,8 @@ module Discovery
           "pkg:generic/limetech/unraid"
         elsif v_down.include?("proxmox") || os_down.include?("proxmox")
           "pkg:deb/debian/proxmox-ve"
-        elsif v_down.include?("apple") || os_down.include?("macos")
-          "pkg:generic/apple/macos"
+        elsif v_down.include?("apple")
+          has_specific_model && !m_slug.include?("macos") ? "pkg:generic/apple/#{m_slug}" : "pkg:generic/apple/macos"
         elsif v_down.include?("nintendo")
           "pkg:generic/nintendo/horizon-os"
         else
@@ -1532,13 +1566,24 @@ module Discovery
             "#{vendor} #{model} #{cand['displayName']}".match?(sig[:pattern])
           end
 
-          base_model_slug = model_slug.sub(/-(100nas|200nas|us|eu|uk|au|ca|v\d+)\z/, "")
-          matched_confirmed = idx_map[:by_purl][inferred_purl.downcase] ||
-                              (model_slug.length >= 3 && idx_map[:by_model_slug][model_slug]) ||
-                              (base_model_slug.length >= 3 && idx_map[:by_model_slug][base_model_slug])
+          candidate_slugs = extract_candidate_model_slugs(model)
+          matched_confirmed = idx_map[:by_purl][inferred_purl.downcase]
+          if matched_confirmed.nil?
+            candidate_slugs.each do |c_slug|
+              matched_confirmed = idx_map[:by_purl]["pkg:generic/#{vendor_slug}/#{c_slug}"] ||
+                                  (c_slug.length >= 3 && idx_map[:by_model_slug][c_slug])
+              break if matched_confirmed
+            end
+          end
           in_confirmed = !matched_confirmed.nil?
-          if matched_confirmed && matched_confirmed["canonical_purl"].present? && matched_feed.nil?
+          if matched_confirmed && matched_confirmed["canonical_purl"].present? && (matched_feed.nil? || model.include?("/"))
             inferred_purl = matched_confirmed["canonical_purl"]
+            matched_feed ||= feeds.find do |f|
+              Array(f["purl_prefixes"]).any? do |prefix|
+                p_str = prefix.to_s
+                inferred_purl.start_with?(p_str) || p_str.start_with?(inferred_purl.split("/")[0..2].join("/"))
+              end
+            end
           end
 
           exact_model_aligned = in_builtin || in_confirmed || !exact_release.nil?
@@ -1714,8 +1759,14 @@ module Discovery
           purl = e["canonical_purl"].to_s.strip.downcase
           by_purl[purl] = e unless purl.empty?
 
-          m_slug = e["model"].to_s.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
+          m_slug = normalize_model_slug(e["model"])
           by_model_slug[m_slug] ||= e if m_slug.length >= 3
+
+          plain_slug = e["model"].to_s.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
+          by_model_slug[plain_slug] ||= e if plain_slug.length >= 3
+
+          no_plus_slug = m_slug.sub(/-plus\z/, "")
+          by_model_slug[no_plus_slug] ||= e if no_plus_slug.length >= 3
         end
 
         @cached_catalog_index = {

@@ -301,4 +301,23 @@ class HardwareVisionServiceTest < Minitest::Test
     assert_equal "Minisforum", parsed["vendor"]
     assert_equal "[Center / Arrow] Compact Mini PC", parsed["candidates"].first["displayName"]
   end
+
+  def test_plus_suffix_and_slash_separated_multi_model_gold_alignment
+    candidates = [
+      { "manufacturer" => "Netgear", "modelNumber" => "CM1100", "displayName" => "Netgear CM1100", "suggestedOsDetails" => "DOCSIS", "confidencePercent" => 95 },
+      { "manufacturer" => "Cisco", "modelNumber" => "WS-C2960-8TC-L", "displayName" => "Cisco Catalyst 2960", "suggestedOsDetails" => "Cisco IOS", "confidencePercent" => 90 },
+      { "manufacturer" => "Synology", "modelNumber" => "DS220+", "displayName" => "Synology DS220+", "suggestedOsDetails" => "DSM 7.2", "confidencePercent" => 85 },
+      { "manufacturer" => "Motorola", "modelNumber" => "MB7420 / MB7621 / MB8600", "displayName" => "Motorola MB Series", "suggestedOsDetails" => "DOCSIS", "confidencePercent" => 85 },
+      { "manufacturer" => "NETGEAR", "modelNumber" => "R6700 / R6220 / GS108T / WNDR Series", "displayName" => "Netgear Router", "suggestedOsDetails" => "Firmware", "confidencePercent" => 75 },
+      { "manufacturer" => "HP", "modelNumber" => "t520", "displayName" => "HP t520 Thin Client", "suggestedOsDetails" => "Linux", "confidencePercent" => 75 }
+    ]
+
+    audited = Discovery::HardwareVisionService.send(:audit_candidates_against_gold_datalake, candidates)
+    audited.each do |c|
+      assert_equal "GOLD ALIGNED", c.dig("goldAlignment", "statusLabel"), "Expected #{c['manufacturer']} #{c['modelNumber']} to be GOLD ALIGNED"
+      assert_equal true, c.dig("goldAlignment", "aligned")
+    end
+    assert_equal "pkg:generic/synology/ds220-plus", audited[2].dig("goldAlignment", "inferredPurl")
+    assert_equal "pkg:generic/motorola/mb7420", audited[3].dig("goldAlignment", "inferredPurl")
+  end
 end
