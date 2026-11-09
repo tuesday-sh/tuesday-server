@@ -166,13 +166,11 @@ module Telemetry
         async: !Rails.env.test?
       )
         now = Time.now.utc
-        accuracy_score = if resolution_status.to_s == "confirmed_candidate" && !was_edited
-                           selected_candidate_rank.to_i == 0 ? 1.0 : 0.75
-                         elsif resolution_status.to_s == "confirmed_candidate" && was_edited
-                           0.5
-                         else
-                           0.0
-                         end
+        selected_top_rank_unmodified = (
+          resolution_status.to_s == "confirmed_candidate" &&
+          !was_edited &&
+          selected_candidate_rank.to_i == 0
+        )
 
         record = {
           "event" => "hosted_ai_confirm",
@@ -187,6 +185,8 @@ module Telemetry
           "sessionId" => session_id.to_s,
           "resolutionStatus" => resolution_status.to_s,
           "selectedCandidateRank" => selected_candidate_rank,
+          "selectedTopRankUnmodified" => selected_top_rank_unmodified,
+          "selectionVerification" => "unverified_user_pick",
           "initialMode" => initial_mode.to_s,
           "finalMode" => final_mode.to_s,
           "turnsCount" => turns_count.to_i,
@@ -198,7 +198,6 @@ module Telemetry
           "confirmedVendor" => confirmed_vendor.to_s,
           "confirmedModel" => confirmed_model.to_s,
           "wasEdited" => !!was_edited,
-          "accuracyScore" => accuracy_score,
           "goldAlignmentStatus" => gold_alignment_status,
           "needsCatalogReview" => !!needs_catalog_review,
           "extractedIdentifiers" => Array(extracted_identifiers).map(&:to_s).first(20),

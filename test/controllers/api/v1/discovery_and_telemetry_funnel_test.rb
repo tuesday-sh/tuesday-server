@@ -176,7 +176,46 @@ module Api
         assert summary.dig("productEventsByDomain", "bulletin").to_i >= 2
         assert summary.dig("productEventsByDomain", "checkup").to_i >= 1
         assert summary.key?("discoveryFunnel")
+        assert summary.key?("devicePickAnalytics")
         assert summary.key?("catalogExpansionQueue")
+
+        # Verify devicePickAnalytics tracks pick counts across devices without assuming ground truth
+        post "/api/v1/discovery/resolve",
+             params: {
+               session_id: "pick-count-a",
+               resolution_status: "confirmed_candidate",
+               selected_candidate_rank: 0,
+               confirmed_vendor: "HP",
+               confirmed_model: "t520",
+               enroll: false
+             },
+             headers: @headers
+        assert_response :success
+
+        post "/api/v1/discovery/resolve",
+             params: {
+               session_id: "pick-count-b",
+               resolution_status: "saved_best_guess",
+               selected_candidate_rank: 1,
+               confirmed_vendor: "HP",
+               confirmed_model: "t520",
+               enroll: false
+             },
+             headers: @headers
+        assert_response :success
+
+        get "/api/v1/telemetry/summary", headers: @headers
+        assert_response :success
+        updated_summary = JSON.parse(response.body)
+        picks = updated_summary.dig("devicePickAnalytics", "topPickedDevices")
+        hp_entry = picks.find { |d| d["vendor"] == "HP" && d["model"] == "t520" }
+        assert_not_nil hp_entry
+        assert_equal 2, hp_entry["totalPickCount"]
+        assert_equal 1, hp_entry.dig("byResolutionStatus", "confirmed_candidate")
+        assert_equal 1, hp_entry.dig("byResolutionStatus", "saved_best_guess")
+        assert_equal 1, hp_entry.dig("bySelectedRank", "rank_0")
+        assert_equal 1, hp_entry.dig("bySelectedRank", "rank_1")
+        assert_equal "unverified_user_selection", hp_entry["verificationStatus"]
       end
     end
   end

@@ -101,6 +101,8 @@ module Api
           }
         end
 
+        device_pick_analytics = build_device_pick_analytics(sessions, turns)
+
         render json: {
           status: "ok",
           generatedAt: Time.now.utc.iso8601,
@@ -111,6 +113,8 @@ module Api
             turn1ConfirmedCount: single_turn_confirmed,
             multiTurnClueRescuedCount: multi_turn_rescued,
             top1UnmodifiedHitCount: top1_unmodified,
+            top1UnmodifiedPickCount: top1_unmodified,
+            selectionNote: "User candidate picks are observational product telemetry, not verified ground-truth labels.",
             totalTurns: turns.count,
             byRoutingTier: turns.group(:routing_tier).count,
             byShortCircuitSource: turns.where.not(short_circuit_source: nil).group(:short_circuit_source).count,
@@ -118,9 +122,110 @@ module Api
             shortCircuitedTurns: sessions.sum(:short_circuited_turns),
             totalTokens: sessions.sum(:total_tokens)
           },
+          devicePickAnalytics: device_pick_analytics,
           catalogExpansionQueue: catalog_review_queue,
           productEventsByDomain: events.group(:event_domain).count,
           productEventsByName: events.group(:event_name).count
+        }
+      end
+
+      private
+
+      def build_device_pick_analytics(sessions, turns)
+        impression_counts = Hash.new(0)
+        turns.find_each do |turn|
+          seen_in_turn = {}
+          Array(turn.candidates_list).each do |cand|
+            v = (cand["manufacturer"] || cand[:manufacturer]).to_s.strip
+            m = (cand["modelNumber"] || cand[:modelNumber]).to_s.strip
+            next if m.empty?
+
+            key = "#{v.downcase}::#{m.downcase}"
+            next if seen_in_turn[key]
+
+            seen_in_turn[key] = true
+            impression_counts[key] += 1
+          end
+
+          if seen_in_turn.empty? && turn.top_model.present?
+            key = "#{turn.top_vendor.to_s.strip.downcase}::#{turn.top_model.to_s.strip.downcase}"
+            impression_counts[key] += 1
+          end
+        end
+
+        picked_sessions = sessions
+                          .where.not(resolution_status: ["in_progress", "abandoned_discarded"])
+                          .where.not(confirmed_model: [nil, ""])
+
+        buckets = {}
+        picked_sessions.find_each do |s|
+          vendor = (s.confirmed_vendor.presence || s.inferred_vendor.presence || "Unknown Vendor").to_s.strip
+          model = s.confirmed_model.to_s.strip
+          next if model.empty?
+
+          key = "#{vendor.downcase}::#{model.downcase}"
+          bucket = (buckets[key] ||= {
+            vendor: vendor,
+            model: model,
+            totalPickCount: 0,
+            impressionsCount: impression_counts[key],
+            byResolutionStatus: Hash.new(0),
+            bySelectedRank: {
+              "rank_0" => 0,
+              "rank_1" => 0,
+              "rank_2_plus" => 0,
+              "unranked_or_manual" => 0
+            },
+            editedPickCount: 0,
+            distinctDeviceIds: {},
+            goldAlignmentStatus: s.gold_alignment_status,
+            lastPickedAt: s.resolved_at || s.updated_at
+          })
+
+          bucket[:totalPickCount] += 1
+          bucket[:byResolutionStatus][s.resolution_status.to_s] += 1
+          bucket[:editedPickCount] += 1 if s.was_edited
+
+          rank = s.selected_candidate_rank
+          if rank.nil?
+            bucket[:bySelectedRank]["unranked_or_manual"] += 1
+          elsif rank.to_i == 0
+            bucket[:bySelectedRank]["rank_0"] += 1
+          elsif rank.to_i == 1
+            bucket[:bySelectedRank]["rank_1"] += 1
+          else
+            bucket[:bySelectedRank]["rank_2_plus"] += 1
+          end
+
+          bucket[:distinctDeviceIds][s.device_id.to_s] = true if s.device_id.present?
+          bucket[:goldAlignmentStatus] ||= s.gold_alignment_status
+          ts = s.resolved_at || s.updated_at
+          bucket[:lastPickedAt] = ts if ts && (bucket[:lastPickedAt].nil? || ts > bucket[:lastPickedAt])
+        end
+
+        top_picked = buckets.values
+                            .sort_by { |b| [-b[:totalPickCount], -(b[:lastPickedAt]&.to_i || 0)] }
+                            .map do |b|
+          {
+            vendor: b[:vendor],
+            model: b[:model],
+            totalPickCount: b[:totalPickCount],
+            impressionsCount: b[:impressionsCount],
+            byResolutionStatus: b[:byResolutionStatus],
+            bySelectedRank: b[:bySelectedRank],
+            editedPickCount: b[:editedPickCount],
+            distinctClientDevicesCount: b[:distinctDeviceIds].size,
+            goldAlignmentStatus: b[:goldAlignmentStatus],
+            verificationStatus: b[:goldAlignmentStatus] == "GOLD ALIGNED" ? "catalog_aligned_user_selection" : "unverified_user_selection",
+            lastPickedAt: b[:lastPickedAt]&.utc&.iso8601
+          }
+        end
+
+        {
+          groundTruthPolicy: "User candidate picks are logged as observational selection telemetry (pick frequency and rank distribution), never assumed to be verified ground-truth identity or model training labels.",
+          totalDevicePicks: top_picked.sum { |d| d[:totalPickCount] },
+          distinctModelsPicked: top_picked.size,
+          topPickedDevices: top_picked
         }
       end
     end

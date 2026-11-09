@@ -533,17 +533,9 @@ module Discovery
                                                       else initial_mode.presence || "photo_wizard"
                                                       end)
 
-        # Only promote identifiers into the Gold Confirmed Catalog when the user explicitly confirmed a candidate (and not a synthetic_sample test graphic)
-        if norm_status == "confirmed_candidate" && initial_mode.to_s != "synthetic_sample" && clean_identifiers.any? && !confirmed_vendor.to_s.strip.empty? && !confirmed_model.to_s.strip.empty?
-          promote_confirmed_identifiers(
-            identifiers: clean_identifiers,
-            vendor: confirmed_vendor.to_s.strip,
-            model: confirmed_model.to_s.strip,
-            lifecycle_tier: suggested_lifecycle_tier,
-            trust_zone: suggested_trust_zone
-          )
-        end
-
+        # Never assume a user's candidate pick is verified ground truth. We are not training a model
+        # or auto-mutating the Gold Confirmed Catalog from unverified user taps. Instead, log what the
+        # user selected as observational product telemetry and aggregate pick frequency analytics.
         session_row = persist_discovery_resolution_telemetry!(
           session_id: session_id,
           network_site_id: network_site_id,

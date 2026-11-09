@@ -59,12 +59,13 @@ class HardwareVisionServiceTest < Minitest::Test
     end
   end
 
-  def test_confirmation_loop_promotes_identifier_to_short_circuit_catalog
+  def test_confirmation_logs_user_selection_without_promoting_to_gold_catalog
     Dir.mktmpdir do |tmpdir|
       ENV["BRONZE_LAKE_DIR"] = tmpdir
       custom_barcode = "UPC-810010079999-TEST"
 
-      # Record user confirmation
+      # Record user selection: must log what was picked as observational telemetry
+      # without assuming the user's pick is ground-truth or mutating the Gold Catalog.
       confirm_record = Discovery::HardwareVisionService.record_confirmation!(
         session_id: "test-session-confirm",
         client_platform: "android",
@@ -82,22 +83,10 @@ class HardwareVisionServiceTest < Minitest::Test
       assert_equal "hosted_ai_confirm", confirm_record["event"]
       assert_equal "USW-Enterprise-8-PoE", confirm_record["confirmedModel"]
       assert_equal true, confirm_record["wasEdited"]
-
-      # Next scan with that barcode should immediately short-circuit for $0.00!
-      scan_result = Discovery::HardwareVisionService.analyze(
-        session_id: "test-session-next",
-        turn_index: 1,
-        client_platform: "ios",
-        device_id: "device-iphone",
-        provider_override: "auto",
-        extracted_identifiers: [custom_barcode],
-        images_base64: []
-      )
-
-      assert_equal true, scan_result["shortCircuited"]
-      assert_equal "Ubiquiti", scan_result["vendor"]
-      assert_equal "USW-Enterprise-8-PoE", scan_result["model"]
-      assert_equal 0.0, scan_result["costUSD"]
+      assert_equal "unverified_user_pick", confirm_record["selectionVerification"]
+      assert_equal false, confirm_record["selectedTopRankUnmodified"]
+      refute confirm_record.key?("accuracyScore")
+      refute File.exist?(Discovery::HardwareVisionService::RUNTIME_CONFIRMED_CATALOG_FILE)
     ensure
       FileUtils.rm_f(Discovery::HardwareVisionService::RUNTIME_CONFIRMED_CATALOG_FILE)
     end
