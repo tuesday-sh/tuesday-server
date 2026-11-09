@@ -235,7 +235,40 @@ module Discovery
                 usage = res_data[:usage]
                 provider_used = "Elastix"
                 model_used = res_data[:model]
-                trace.call("LLM_OK", "Elastix #{model_used} responded (in=#{usage[:input_tokens]} out=#{usage[:output_tokens]} cached=#{usage[:cache_read_tokens]} tokens)")
+                elastix_top_conf = result["confidence"] || ((Array(result["candidates"]).first&.dig("confidencePercent") || 0).to_f / 100.0)
+                trace.call("LLM_OK", "Elastix #{model_used} responded (conf=#{(elastix_top_conf * 100).round}% in=#{usage[:input_tokens]} out=#{usage[:output_tokens]} cached=#{usage[:cache_read_tokens]} tokens)")
+
+                # Escalate to GCP Gemini Flash when Elastix confidence < 0.65 (e.g. rotated PCB stickers, embossed text, or multi-device cabinets)
+                if elastix_top_conf < 0.65 && ENV["GEMINI_API_KEY"].to_s.strip.present? && provider_override.to_s.downcase == "auto"
+                  trace.call("LLM_ESCALATE", "Elastix top confidence #{(elastix_top_conf * 100).round}% < 65% threshold -> escalating to GCP Gemini Flash")
+                  begin
+                    gem_data = call_gemini_interactions(
+                      turn_index: turn_index,
+                      previous_guess: result,
+                      clues: normalized_clues,
+                      ephemeral_frames: ephemeral_frames
+                    )
+                    gem_res = gem_data[:result]
+                    gem_conf = gem_res["confidence"] || ((Array(gem_res["candidates"]).first&.dig("confidencePercent") || 0).to_f / 100.0)
+                    usage = {
+                      input_tokens: usage[:input_tokens].to_i + gem_data[:usage][:input_tokens].to_i,
+                      output_tokens: usage[:output_tokens].to_i + gem_data[:usage][:output_tokens].to_i,
+                      cache_read_tokens: usage[:cache_read_tokens].to_i + gem_data[:usage][:cache_read_tokens].to_i
+                    }
+                    fallback_used = true
+                    if gem_conf >= elastix_top_conf
+                      result = gem_res
+                      raw_llm_response = gem_data[:raw_text]
+                      provider_used = "Google"
+                      model_used = gem_data[:model]
+                      trace.call("LLM_OK", "Gemini escalation #{model_used} improved confidence to #{(gem_conf * 100).round}%")
+                    else
+                      trace.call("LLM_OK", "Gemini escalation returned #{(gem_conf * 100).round}%; retaining Elastix result (#{(elastix_top_conf * 100).round}%)")
+                    end
+                  rescue StandardError => esc_err
+                    trace.call("LLM_WARN", "Gemini low-confidence escalation skipped (#{esc_err.message}); retaining Elastix result")
+                  end
+                end
               rescue StandardError => elastix_err
                 Rails.logger.warn("[Discovery::HardwareVisionService] Elastix primary failed (#{elastix_err.message}); failing over to Gemini")
                 trace.call("LLM_WARN", "Elastix primary failed: #{elastix_err.message} -> failing over to GCP Gemini")
@@ -1056,12 +1089,15 @@ module Discovery
           /no_think
           You are a hardware device inventory discovery assistant for Tuesday.sh running on Elastix.ai.
           LATENCY CRITICAL: Keep internal thinking/reasoning under 25 words. Do NOT over-deliberate. Output the JSON object immediately with concise 1-sentence fields.
+          MULTI-DEVICE & PCB RULES:
+          - If multiple distinct hardware devices are visible in one photo (e.g. a network switch AND Raspberry Pi SBCs in a wall cabinet), list each distinct device as its own entry in "candidates" (up to 3) with your best specific "modelNumber" estimate (e.g. "WS-C2960-8TC-L", "RPi-4B", "RPi-3B+" — never "unknown").
+          - Inspect rotated/vertical module stickers, FCC IDs, silkscreened board numbers, and SBC/PCB layouts carefully.
           Return ONLY a valid JSON object with the exact following keys:
-          - "visualSummary": concise 1-sentence summary of hardware and clues
+          - "visualSummary": concise 1-sentence summary of all hardware devices and clues visible
           - "nextNarrowingQuestion": concise question asking for Barcode, Serial Number, QR Code, Model, or MAC Address
           - "recommendedClueTypes": array of strings from ["Model", "MAC Address", "Serial Number", "Barcode", "QR Code"]
           - "extractedIdentifiers": object with string or null fields {"barcode", "serialNumber", "qrCode", "modelNumber", "macAddress"}
-          - "candidates": array of up to 3 objects (include both top match and alternative raw visual matches), each with exact keys:
+          - "candidates": array of up to 3 objects (distinct devices visible in frame or top model candidates), each with exact keys:
             - "manufacturer": string
             - "modelNumber": string
             - "displayName": string
@@ -1148,10 +1184,10 @@ module Discovery
 
         prompt_text = <<~PROMPT.strip
           <instructions>
-          You are a hardware device inventory discovery assistant for Tuesday.sh (a home lab, router, switch, NAS, and IoT package/firmware telemetry platform).
+          You are a hardware device inventory discovery assistant for Tuesday.sh (a home lab, router, switch, NAS, SBC, and IoT package/firmware telemetry platform).
           Analyze the attached hardware device photo(s) along with any user-supplied identifiers (barcode, serial number, QR code, model number, or MAC address).
-          1. Extract any visible Barcode, Serial Number, QR Code payload, Model Number, or MAC Address from the photo(s) or user clues.
-          2. Rank up to 3 candidate hardware devices (including alternative raw visual matches even if lower confidence; fields: manufacturer, modelNumber, displayName, deviceCategory, confidencePercent 1-99, reasoning, suggestedHostname, suggestedOsDetails, suggestedPackageManager from [apt, apk, brew, yum, docker, hacs, firmware]).
+          1. Extract any visible Barcode, Serial Number, QR Code payload, FCC ID, Model Number, or MAC Address from the photo(s) (including rotated/vertical daughterboard or mini-PCIe stickers and PCB silkscreen markings) or user clues.
+          2. Rank up to 3 candidate hardware devices (fields: manufacturer, modelNumber, displayName, deviceCategory, confidencePercent 1-99, reasoning, suggestedHostname, suggestedOsDetails, suggestedPackageManager from [apt, apk, brew, yum, docker, hacs, firmware]). If multiple distinct devices are visible in one enclosure/cabinet photo (e.g., a switch plus Raspberry Pi SBCs), include each distinct device in `candidates`.
           3. Formulate a concise `nextNarrowingQuestion` asking the user if there is a Barcode, Serial Number, QR Code, Model, or MAC Address on the device/sticker that can disambiguate the top candidates.
           </instructions>
           <accumulated_clues>
