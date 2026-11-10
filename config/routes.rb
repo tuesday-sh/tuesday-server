@@ -25,6 +25,7 @@ Rails.application.routes.draw do
       get "telemetry/summary", to: "telemetry#summary"
       get "datalake/status", to: "datalake#status"
       post "datalake/sync", to: "datalake#sync"
+      get "catalog/clue-index", to: "datalake#clue_index"
       post "notifications/register_token", to: "notifications#register_token"
       post "notifications/dispatch", to: "notifications#dispatch_notifications"
       get "notifications/pending", to: "notifications#pending"

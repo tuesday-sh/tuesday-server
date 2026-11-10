@@ -53,6 +53,32 @@ module Api
         }
       end
 
+      # GET /api/v1/catalog/clue-index
+      # Local/origin fallback mirroring the Cloudflare Worker Edge-pinned Gold Clue Index.
+      def clue_index
+        lake_dir = Bulletins::GoldSnapshotLoader.resolve_lake_dir
+        gz_path = File.join(lake_dir, "gold_clue_index.json.gz")
+        json_path = File.join(lake_dir, "gold_clue_index.json")
+        return render json: { error: "gold_clue_index not compiled" }, status: :not_found unless File.exist?(gz_path)
+
+        etag_val = if File.exist?(json_path)
+                     JSON.parse(File.read(json_path))["etag"].to_s
+                   else
+                     Digest::SHA256.file(gz_path).hexdigest[0, 12]
+                   end
+        quoted_etag = "\"#{etag_val}\""
+        if_none_match = request.headers["If-None-Match"].to_s.strip
+        if [quoted_etag, etag_val, "W/#{quoted_etag}"].include?(if_none_match)
+          response.set_header("ETag", quoted_etag)
+          head :not_modified
+          return
+        end
+
+        response.set_header("ETag", quoted_etag)
+        response.set_header("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400")
+        send_data File.binread(gz_path), type: "application/gzip", disposition: "inline"
+      end
+
       private
 
       def load_datalake_manifest
