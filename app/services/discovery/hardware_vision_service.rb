@@ -495,6 +495,8 @@ module Discovery
           "extractedIdentifiers" => normalized_clues[:flat_list],
           "multipleDevicesDetected" => !!result["multipleDevicesDetected"],
           "multiDeviceWarning" => result["multiDeviceWarning"],
+          "isNetworkedDevice" => result.key?("isNetworkedDevice") ? !!result["isNetworkedDevice"] : true,
+          "outOfScopeReason" => result["outOfScopeReason"],
           "candidates" => audited_candidates,
           # Top-level summary, coaching & telemetry fields
           "vendor" => top_vendor,
@@ -1129,32 +1131,7 @@ module Discovery
         model = ENV.fetch("ELASTIX_MODEL", "qwen3.8-27b")
         clue_context = clues[:flat_list].any? ? clues[:flat_list].map { |c| "- #{c}" }.join("\n") : "None provided yet."
 
-        system_prompt = <<~SYS.strip
-          /no_think
-          You are a hardware device inventory discovery assistant for Tuesday.sh running on Elastix.ai.
-          LATENCY CRITICAL: Keep internal thinking/reasoning under 25 words. Do NOT over-deliberate. Output the JSON object immediately with concise 1-sentence fields.
-          SPATIAL SALIENCE, VISUAL POINTERS & MULTI-DEVICE RULES:
-          - PRIMARY SUBJECT RULE (CENTER OF FRAME & ARROWS): Always prioritize the device at the CENTER/FOREGROUND of the photo or explicitly indicated by a visual pointer (red arrow, circle, bounding box, or finger). Candidate #1 (rank 0) MUST identify that primary central/pointed-to device—NEVER rank a background or edge device #1 just because its LEDs or brand logo are easier to recognize.
-          - NO CROSS-CHASSIS FEATURE BLEEDING OR REFLECTION CONFUSION: Never merge ports, LEDs, or logos from an adjacent peripheral chassis (e.g. a NAS on the left edge) or a mirrored reflection on a glossy side panel onto the central device.
-          - Set "multipleDevicesDetected": true whenever 2 or more distinct physical hardware chassis/units are visible in the photo. List the central/annotated device as Candidate #1 and any peripheral/adjacent device as Candidate #2/#3 with spatial tags in displayName (e.g. "[Center / Arrow] ...", "[Left Edge] ...").
-          - Inspect rotated/vertical module stickers, FCC IDs, silkscreened board numbers, and SBC/PCB layouts carefully.
-          Return ONLY a valid JSON object with the exact following keys:
-          - "visualSummary": concise 1-sentence summary of all hardware devices and clues visible
-          - "multipleDevicesDetected": boolean (true if 2+ distinct hardware chassis/enclosures are visible in the frame)
-          - "nextNarrowingQuestion": concise question asking for Barcode, Serial Number, QR Code, Model, or MAC Address of the central target device
-          - "recommendedClueTypes": array of strings from ["Model", "MAC Address", "Serial Number", "Barcode", "QR Code"]
-          - "extractedIdentifiers": object with string or null fields {"barcode", "serialNumber", "qrCode", "modelNumber", "macAddress"}
-          - "candidates": array of up to 3 objects (Candidate #1 MUST be the central/pointed-to device), each with exact keys:
-            - "manufacturer": string
-            - "modelNumber": string
-            - "displayName": string
-            - "deviceCategory": string
-            - "confidencePercent": integer (1 to 99)
-            - "reasoning": concise 1-sentence reason
-            - "suggestedHostname": string
-            - "suggestedOsDetails": plain string (e.g. "UniFi OS 4.0.20 (Debian 12 apt)")
-            - "suggestedPackageManager": string from ["apt", "apk", "brew", "yum", "docker", "hacs", "firmware"]
-        SYS
+        system_prompt = vision_system_prompt(include_no_think: true)
 
         user_prompt = <<~USR.strip
           <accumulated_clues>
@@ -1231,14 +1208,7 @@ module Discovery
 
         prompt_text = <<~PROMPT.strip
           <instructions>
-          You are a hardware device inventory discovery assistant for Tuesday.sh (a home lab, router, switch, NAS, SBC, Mini PC, and IoT package/firmware telemetry platform).
-          Analyze the attached hardware device photo(s) along with any user-supplied identifiers (barcode, serial number, QR code, model number, or MAC address).
-          1. PRIMARY SUBJECT & VISUAL POINTER RULE: Always identify the device that occupies the CENTER/FOREGROUND of the photo or is explicitly indicated by a user annotation (drawn red arrow, circle, box, or finger). Candidate #1 (rank 0) MUST be that central/annotated device—NEVER rank a peripheral/background device #1 just because its LEDs or branding are easier to recognize!
-          2. ANTI-CONTAMINATION & REFLECTION RULE: Do NOT blend features (ports, LEDs, form factor) from an adjacent peripheral chassis (such as a cropped Synology NAS on the left edge) or a backwards mirrored reflection on a glossy side panel (such as a reflected logo from an adjacent drive enclosure) onto the central device. For example, a slim vertical box with Wi-Fi + POWER LEDs, front USB-A, USB-C, and a 3.5mm audio jack is a Mini PC / Thin Client / USB-C Dock, NOT a NAS sitting beside it.
-          3. MULTI-DEVICE DETECTION: Set `multipleDevicesDetected` to `true` whenever 2 or more distinct physical hardware chassis/units are visible in the photo. Prefix each candidate's `displayName` with its spatial location (e.g., `[Center / Arrow] ...`, `[Left Edge] ...`).
-          4. Extract any visible Barcode, Serial Number, QR Code payload, FCC ID, Model Number, or MAC Address from the photo(s) (including rotated/vertical daughterboard stickers and PCB silkscreen markings) or user clues.
-          5. Rank up to 3 candidate hardware devices (fields: manufacturer, modelNumber, displayName, deviceCategory, confidencePercent 1-99, reasoning, suggestedHostname, suggestedOsDetails, suggestedPackageManager from [apt, apk, brew, yum, docker, hacs, firmware]).
-          6. Formulate a concise `nextNarrowingQuestion` asking the user for the Barcode, Serial Number, Model, or MAC Address of the central target device.
+          #{vision_system_prompt(include_no_think: false)}
           </instructions>
           <accumulated_clues>
           Turn #{turn_index}:
@@ -1326,27 +1296,37 @@ module Discovery
         }
       end
 
+      def vision_system_prompt(include_no_think: false)
+        prefix = include_no_think ? "/no_think\n" : ""
+        <<~SYS.strip
+          #{prefix}You are a hardware device inventory discovery assistant for Tuesday.sh.
+          LATENCY CRITICAL: Keep internal thinking/reasoning under 25 words. Do NOT over-deliberate. Output the JSON object immediately.
+          SPATIAL SALIENCE & MULTI-DEVICE RULES:
+          - PRIMARY SUBJECT RULE (CENTER OF FRAME): Always prioritize the device at the CENTER/FOREGROUND of the photo. Candidate #1 (rank 0) MUST identify that primary central device—NEVER rank a background or edge device #1 just because its LEDs or brand logo are easier to recognize.
+          - NO CROSS-CHASSIS FEATURE BLEEDING OR REFLECTION CONFUSION: Never merge ports, LEDs, or logos from an adjacent peripheral chassis or a mirrored reflection on a glossy side panel onto the central device.
+          - Set "multipleDevicesDetected": true whenever 2 or more distinct physical hardware chassis/units are visible in the photo. List the central device as Candidate #1 and any peripheral/adjacent device as Candidate #2/#3 with spatial tags in displayName (e.g. "[Center] ...", "[Left Edge] ...").
+          - Inspect rotated/vertical module stickers, FCC IDs, silkscreened board numbers, and SBC/PCB layouts carefully.
+          Return ONLY a valid JSON object with the exact following keys:
+          - "visualSummary": concise 1-sentence summary of all hardware devices and clues visible
+          - "isNetworkedDevice": boolean (true if the primary device has Wi-Fi, Ethernet, cellular, or network interface capability; false if it is a non-networked object or Bluetooth-only peripheral)
+          - "outOfScopeReason": string or null (if isNetworkedDevice is false, a concise 1-sentence explanation of what was identified and why it is outside SureThingNet's Wi-Fi/Ethernet network hardware scope; otherwise null)
+          - "multipleDevicesDetected": boolean (true if 2+ distinct hardware chassis/enclosures are visible in the frame)
+          - "candidates": array of up to 3 objects (Candidate #1 MUST be the central device), each with exact keys:
+            - "manufacturer": string
+            - "modelNumber": string
+            - "displayName": string
+            - "confidencePercent": integer (1 to 99)
+        SYS
+      end
+
       def gemini_turn_schema
         {
           "type" => "object",
           "properties" => {
             "visualSummary" => { "type" => "string" },
+            "isNetworkedDevice" => { "type" => "boolean" },
+            "outOfScopeReason" => { "type" => "string" },
             "multipleDevicesDetected" => { "type" => "boolean" },
-            "nextNarrowingQuestion" => { "type" => "string" },
-            "recommendedClueTypes" => {
-              "type" => "array",
-              "items" => { "type" => "string" }
-            },
-            "extractedIdentifiers" => {
-              "type" => "object",
-              "properties" => {
-                "barcode" => { "type" => "string" },
-                "serialNumber" => { "type" => "string" },
-                "qrCode" => { "type" => "string" },
-                "modelNumber" => { "type" => "string" },
-                "macAddress" => { "type" => "string" }
-              }
-            },
             "candidates" => {
               "type" => "array",
               "items" => {
@@ -1355,18 +1335,13 @@ module Discovery
                   "manufacturer" => { "type" => "string" },
                   "modelNumber" => { "type" => "string" },
                   "displayName" => { "type" => "string" },
-                  "deviceCategory" => { "type" => "string" },
-                  "confidencePercent" => { "type" => "integer" },
-                  "reasoning" => { "type" => "string" },
-                  "suggestedHostname" => { "type" => "string" },
-                  "suggestedOsDetails" => { "type" => "string" },
-                  "suggestedPackageManager" => { "type" => "string" }
+                  "confidencePercent" => { "type" => "integer" }
                 },
-                "required" => %w[manufacturer modelNumber displayName deviceCategory confidencePercent reasoning suggestedHostname suggestedOsDetails suggestedPackageManager]
+                "required" => %w[manufacturer modelNumber displayName confidencePercent]
               }
             }
           },
-          "required" => %w[visualSummary multipleDevicesDetected nextNarrowingQuestion recommendedClueTypes extractedIdentifiers candidates]
+          "required" => %w[visualSummary isNetworkedDevice multipleDevicesDetected candidates]
         }
       end
 
@@ -1415,9 +1390,14 @@ module Discovery
                            vis_summary.match?(/\b(beside|next to|alongside|second |multiple |left unit|right unit|two .*chassis|two .*devices)\b/i)
                          end
 
+        is_networked = json.key?("isNetworkedDevice") ? !!json["isNetworkedDevice"] : true
+        out_of_scope_reason = is_networked ? nil : (json["outOfScopeReason"].presence || "This item does not appear to have Wi-Fi or Ethernet networking and is outside SureThingNet Insights' scope.")
+
         top = candidates.first || {}
         {
           "visualSummary" => vis_summary,
+          "isNetworkedDevice" => is_networked,
+          "outOfScopeReason" => out_of_scope_reason,
           "multipleDevicesDetected" => multi_detected,
           "multiDeviceWarning" => multi_detected ? MULTI_DEVICE_WARNING_MESSAGE : nil,
           "nextNarrowingQuestion" => json["nextNarrowingQuestion"].presence || "Can you check for a Barcode, Serial Number, Model, or MAC Address on the label?",
