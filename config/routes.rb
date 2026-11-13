@@ -30,7 +30,9 @@ Rails.application.routes.draw do
       post "notifications/dispatch", to: "notifications#dispatch_notifications"
       get "notifications/pending", to: "notifications#pending"
       post "notifications/:id/ack", to: "notifications#ack"
+      get "billing/status", to: "billing#status"
       post "billing/verify", to: "billing#verify"
+      post "billing/webhooks/google_play", to: "billing#google_play_webhook"
     end
   end
 end

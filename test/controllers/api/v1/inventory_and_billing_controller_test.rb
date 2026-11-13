@@ -115,6 +115,126 @@ module Api
         assert_equal "pro_tier_1", body["entitlementTier"]
         assert_equal 128, body["maxPorts"]
       end
+
+      test "POST /api/v1/billing/verify supports Android Play Billing purchase_token and GET /api/v1/billing/status" do
+        get "/api/v1/billing/status", headers: @headers
+        assert_response :success
+        initial = JSON.parse(response.body)
+        assert_equal "free", initial["entitlementTier"]
+
+        post "/api/v1/billing/verify",
+             params: {
+               platform: "android",
+               product_id: "sh.tuesday.pro.tier1.monthly",
+               purchase_token: "gp_token_android_test_12345"
+             },
+             headers: @headers
+
+        assert_response :success
+        verified = JSON.parse(response.body)
+        assert_equal "verified", verified["status"]
+        assert_equal "android", verified["platform"]
+        assert_equal "sh.tuesday.pro.tier1.monthly", verified["productId"]
+        assert_equal "pro_tier_1", verified["entitlementTier"]
+
+        get "/api/v1/billing/status", headers: @headers
+        assert_response :success
+        after = JSON.parse(response.body)
+        assert_equal "pro_tier_1", after["entitlementTier"]
+        assert_equal "sh.tuesday.pro.tier1.monthly", after["activeSubscriptionSku"]
+      end
+
+      test "POST /api/v1/billing/verify rejects cross-account purchase_token replay and handles RTDN expiry webhook" do
+        token = "gp_token_unique_owner_1"
+        post "/api/v1/billing/verify",
+             params: {
+               platform: "android",
+               product_id: "sh.tuesday.pro.tier1.annual",
+               purchase_token: token
+             },
+             headers: @headers
+        assert_response :success
+
+        # Replay from a different device/account must fail with 409 Conflict
+        other_headers = {
+          "X-Tuesday-Device-ID" => "other-device-999",
+          "X-Tuesday-Client-Platform" => "android"
+        }
+        post "/api/v1/billing/verify",
+             params: {
+               platform: "android",
+               product_id: "sh.tuesday.pro.tier1.annual",
+               purchase_token: token
+             },
+             headers: other_headers
+        assert_response :conflict
+
+        # Play Console RTDN testNotification returns 200 OK
+        test_notif_b64 = Base64.strict_encode64({
+          "version" => "1.0",
+          "packageName" => "sh.tuesday.app",
+          "testNotification" => { "version" => "1.0" }
+        }.to_json)
+        post "/api/v1/billing/webhooks/google_play",
+             params: { message: { data: test_notif_b64 } },
+             as: :json
+        assert_response :success
+        assert_equal "test_notification", JSON.parse(response.body)["event"]
+
+        # Play RTDN SUBSCRIPTION_EXPIRED (notificationType = 13) downgrades site back to free
+        expired_b64 = Base64.strict_encode64({
+          "version" => "1.0",
+          "packageName" => "sh.tuesday.app",
+          "subscriptionNotification" => {
+            "version" => "1.0",
+            "notificationType" => 13,
+            "purchaseToken" => token,
+            "subscriptionId" => "sh.tuesday.pro.tier1.annual"
+          }
+        }.to_json)
+        post "/api/v1/billing/webhooks/google_play",
+             params: { message: { data: expired_b64 } },
+             as: :json
+        assert_response :success
+        webhook_body = JSON.parse(response.body)
+        assert_equal "SUBSCRIPTION_STATE_EXPIRED", webhook_body["subscriptionState"]
+        assert_equal "free", webhook_body["entitlementTier"]
+
+        get "/api/v1/billing/status", headers: @headers
+        assert_response :success
+        assert_equal "free", JSON.parse(response.body)["entitlementTier"]
+      end
+
+      test "POST /api/v1/billing/verify rejects invalid Play receipt when GooglePlayVerifier returns invalid" do
+        invalid_result = Billing::GooglePlayVerifier::VerificationResult.new(
+          valid: false,
+          active: false,
+          subscription_state: "SUBSCRIPTION_STATE_INVALID",
+          product_id: "sh.tuesday.pro.tier1.annual",
+          verification_source: "google_play_api",
+          error_code: "invalid_purchase_token",
+          error_message: "Invalid purchase token",
+          raw_metadata: {}
+        )
+
+        orig = Billing::GooglePlayVerifier.method(:verify_subscription_token)
+        Billing::GooglePlayVerifier.define_singleton_method(:verify_subscription_token) do |*args, **kwargs|
+          invalid_result
+        end
+        begin
+          post "/api/v1/billing/verify",
+               params: {
+                 platform: "android",
+                 product_id: "sh.tuesday.pro.tier1.annual",
+                 purchase_token: "forged_real_looking_token"
+               },
+               headers: @headers
+          assert_response :unprocessable_entity
+          assert_equal "invalid_purchase_token", JSON.parse(response.body)["code"]
+        ensure
+          Billing::GooglePlayVerifier.define_singleton_method(:verify_subscription_token, orig)
+        end
+      end
     end
   end
 end

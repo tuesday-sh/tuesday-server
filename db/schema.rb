@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_11_09_180000) do
+ActiveRecord::Schema[7.2].define(version: 2026_11_13_211500) do
   create_table "api_keys", force: :cascade do |t|
     t.integer "bearer_id", null: false
     t.string "bearer_type", null: false
@@ -19,6 +19,29 @@ ActiveRecord::Schema[7.2].define(version: 2026_11_09_180000) do
     t.datetime "updated_at", null: false
     t.index ["bearer_id", "bearer_type"], name: "index_api_keys_on_bearer_id_and_bearer_type"
     t.index ["token"], name: "index_api_keys_on_token", unique: true
+  end
+
+  create_table "billing_subscriptions", force: :cascade do |t|
+    t.integer "network_site_id", null: false
+    t.string "platform", default: "android", null: false
+    t.string "package_name", default: "sh.tuesday.app", null: false
+    t.string "product_id", null: false
+    t.string "purchase_token", null: false
+    t.string "external_account_id"
+    t.string "external_profile_id"
+    t.string "entitlement_tier", default: "pro_tier_1", null: false
+    t.string "subscription_state", default: "SUBSCRIPTION_STATE_ACTIVE", null: false
+    t.string "verification_source", default: "sandbox", null: false
+    t.boolean "auto_renewing", default: true, null: false
+    t.boolean "is_test_purchase", default: false, null: false
+    t.datetime "expires_at"
+    t.datetime "last_verified_at"
+    t.text "raw_metadata_json", default: "{}", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["network_site_id", "subscription_state"], name: "idx_billing_subs_site_state"
+    t.index ["network_site_id"], name: "index_billing_subscriptions_on_network_site_id"
+    t.index ["purchase_token"], name: "index_billing_subscriptions_on_purchase_token", unique: true
   end
 
   create_table "canonical_feeds", force: :cascade do |t|
@@ -291,6 +314,7 @@ ActiveRecord::Schema[7.2].define(version: 2026_11_09_180000) do
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
   end
 
+  add_foreign_key "billing_subscriptions", "network_sites"
   add_foreign_key "device_push_tokens", "network_sites"
   add_foreign_key "monitored_devices", "network_sites"
   add_foreign_key "notification_deliveries", "monitored_devices"

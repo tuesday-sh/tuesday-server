@@ -3,6 +3,7 @@
 class NetworkSite < ApplicationRecord
   belongs_to :user, optional: true
   has_many :monitored_devices, -> { order(port_index: :asc) }, dependent: :destroy
+  has_many :billing_subscriptions, dependent: :destroy
 
   VALID_SITE_TIERS = %w[day_zero pea garden forest].freeze
   VALID_ENTITLEMENTS = %w[free pro_tier_1 fleet].freeze

@@ -55,12 +55,21 @@
   },
   {
     "id": "0192d9f0-feed-7000-8000-000000000005",
-    "slug": "unraid-nintendo-ok",
-    "pro_name": "Unraid OS & Switch 2 Release Channel",
-    "stn_name": "Unraid Storage & Nintendo Switch Updates",
+    "slug": "unraid-os-releases",
+    "pro_name": "Unraid OS Stable Release Channel",
+    "stn_name": "Unraid Storage Server Updates",
     "feed_category": "release",
     "purl_prefixes": [
-      "pkg:generic/limetech/unraid",
+      "pkg:generic/limetech/unraid"
+    ]
+  },
+  {
+    "id": "0192d9f0-feed-7000-8000-000000000020",
+    "slug": "nintendo-switch-updates",
+    "pro_name": "Nintendo Switch & Horizon OS System Updates",
+    "stn_name": "Nintendo Switch Console Updates",
+    "feed_category": "release",
+    "purl_prefixes": [
       "pkg:generic/nintendo/horizon-os"
     ]
   },
