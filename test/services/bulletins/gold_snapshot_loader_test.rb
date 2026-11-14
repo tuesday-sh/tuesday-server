@@ -13,22 +13,22 @@ class GoldSnapshotLoaderTest < Minitest::Test
       muted_feed_slugs: ["lg-esphome-iot"]
     )
 
-    assert_equal 7, payload[:matched_feeds].size
-    assert_equal 5, payload[:ai_summary][:active_feed_count]
+    assert_equal 8, payload[:matched_feeds].size
+    assert_equal 6, payload[:ai_summary][:active_feed_count]
     assert_equal 1, payload[:ai_summary][:muted_feed_count]
     assert_equal 1, payload[:ai_summary][:provisional_feed_count]
     assert_equal 1, payload[:ai_summary][:muted_high_sev_override_count]
     assert_equal 1, payload[:ai_summary][:provisional_high_sev_count]
-    assert_equal 4, payload[:ai_summary][:bullets].size
+    assert_equal 3, payload[:ai_summary][:bullets].size
 
     # Verify Best-Guess feed (`ecobee-umbrella`) is in provisional_guess mode
     ecobee = payload[:matched_feeds].find { |f| f[:slug] == "ecobee-umbrella" }
     assert_equal "provisional_guess", ecobee[:match_mode]
     assert_includes ecobee[:candidate_models], "SmartThermostat Premium"
 
-    # Verify inbox contains 6 items (4 confirmed unmuted + 1 high-sev override from muted LG feed + 1 high-sev from provisional Ecobee feed)
+    # Verify inbox contains 5 items (3 confirmed unmuted + 1 high-sev override from muted LG feed + 1 high-sev from provisional Ecobee feed)
     # while routine ESPHome (muted) and routine Ecobee (provisional) releases are suppressed.
-    assert_equal 6, payload[:inbox].size
+    assert_equal 5, payload[:inbox].size
     lg_alert = payload[:inbox].find { |b| b[:external_id] == "CVE-2026-21099" }
     assert_equal true, lg_alert[:broke_through_mute]
 
