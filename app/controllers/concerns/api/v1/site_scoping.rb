@@ -23,7 +23,7 @@ module Api
       end
 
       def current_site_slug
-        (request.headers["X-Tuesday-Site-Slug"].presence || params[:site_slug].presence || "skyway-lab").to_s.parameterize.presence || "skyway-lab"
+        (request.headers["X-Tuesday-Site-Slug"].presence || params[:site_slug].presence || "net-default").to_s.parameterize.presence || "net-default"
       end
 
       def current_network_site(auto_create: false)
@@ -31,12 +31,12 @@ module Api
 
         owner = current_owner_key
         slug = current_site_slug
-        site = NetworkSite.find_by(owner_key: owner, slug: slug)
+        site = NetworkSite.find_by(owner_key: owner, slug: slug) || NetworkSite.find_by(owner_key: owner)
 
         if site.nil? && auto_create
           site = NetworkSite.create!(
             owner_key: owner,
-            name: params[:site_name].presence || "Skyway Lab",
+            name: params[:site_name].presence || "My Network",
             slug: slug,
             site_tier: "day_zero",
             entitlement_tier: "free"

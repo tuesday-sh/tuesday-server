@@ -100,13 +100,14 @@ module Api
 
         if auto_dispatch
           all_sites = ActiveModel::Type::Boolean.new.cast(params[:all_sites]) || false
+          owner_scope = NetworkSite.where(owner_key: current_owner_key)
           site = current_network_site(auto_create: false)
           sites_to_dispatch = if all_sites
-                                NetworkSite.joins(:monitored_devices).distinct.to_a
+                                owner_scope.joins(:monitored_devices).distinct.to_a
                               elsif site && site.monitored_devices.any?
                                 [site]
                               else
-                                [NetworkSite.joins(:monitored_devices).group("network_sites.id").order("COUNT(monitored_devices.id) DESC").first].compact
+                                []
                               end
           sites_to_dispatch.each do |target_site|
             Notifications::FleetBulletinDispatcher.dispatch_for_site!(

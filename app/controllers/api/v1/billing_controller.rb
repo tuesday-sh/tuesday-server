@@ -333,7 +333,7 @@ module Api
         return nil if external_account_id.to_s.strip.empty?
 
         owner_key = external_account_id.to_s.strip
-        slug = external_profile_id.to_s.strip.presence || "skyway-lab"
+        slug = external_profile_id.to_s.strip.presence || "net-default"
         NetworkSite.find_by(owner_key: owner_key, slug: slug) || NetworkSite.find_by(owner_key: owner_key)
       end
 
