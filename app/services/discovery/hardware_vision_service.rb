@@ -35,6 +35,8 @@ module Discovery
 
     DEFAULT_CLUE_TYPES = ["Model", "MAC Address", "Serial Number", "Barcode", "QR Code"].freeze
 
+    HALLUCINATED_OUT_OF_SCOPE_PATTERN = /\b(ir remote|infrared|remote(?:-|\s*)control|remote module|non-networked|receiver\/transmitter|receiver module|transmitter module)\b/i
+
     BUILT_IN_CATALOG_SIGNATURES = [
       {
         pattern: /\b(UDM-PRO|UDM\s*PRO)\b/i,
@@ -126,6 +128,19 @@ module Discovery
         lifecycle_tier: "active",
         trust_zone: "z3_iot",
         reasoning: "Matched Zigbee Coordinator identifier in Gold Hardware Catalog ($0.00 short-circuit)."
+      },
+      {
+        pattern: /\b(MX-?M453N|MX-?M363N|MX-?4101N|BP-?70C45)\b/i,
+        vendor: "Sharp",
+        model: "MX-M453N",
+        display_name: "Sharp MX-M453N Network Multifunction Printer",
+        category: "IoT / Printer",
+        hostname: "sharp-mx-m453n",
+        os_details: "Sharp OSA / MFP Firmware",
+        pkg_manager: "firmware",
+        lifecycle_tier: "active",
+        trust_zone: "z3_iot",
+        reasoning: "Matched Sharp MX/BP Network Multifunction Printer identifier in Gold Hardware Catalog ($0.00 short-circuit)."
       }
     ].freeze
 
@@ -324,8 +339,51 @@ module Discovery
         )
 
         # Step 3: Audit every candidate against the Gold Datalake (canonical_feeds, catalog_releases, confirmed_identifiers)
-        audited_candidates = audit_candidates_against_gold_datalake(Array(result["candidates"]), trace: trace)
+        llm_is_networked = result.key?("isNetworkedDevice") ? !!result["isNetworkedDevice"] : true
+        audited_candidates = audit_candidates_against_gold_datalake(
+          Array(result["candidates"]),
+          is_networked_device: llm_is_networked,
+          trace: trace
+        )
         result["candidates"] = audited_candidates
+
+        if audited_candidates.any? { |c| c.dig("goldAlignment", "aligned") || c.dig("goldAlignment", "vendorFeedOnly") } &&
+           (!llm_is_networked || result["outOfScopeReason"].present?)
+          aligned_top = audited_candidates.find { |c| c.dig("goldAlignment", "aligned") } ||
+                        audited_candidates.find { |c| c.dig("goldAlignment", "vendorFeedOnly") } ||
+                        audited_candidates.first
+          top_purl = aligned_top&.dig("goldAlignment", "inferredPurl")
+          trace.call(
+            "GOLD_SCOPE_OVERRIDE",
+            "Overriding LLM isNetworkedDevice=#{llm_is_networked} / outOfScopeReason because #{aligned_top['manufacturer']} #{aligned_top['modelNumber']} (#{top_purl}) matched Gold Catalog"
+          )
+          result["isNetworkedDevice"] = true
+          result["outOfScopeReason"] = nil
+
+          audited_candidates.each do |c|
+            ga = c["goldAlignment"] || {}
+            next unless ga["aligned"] || ga["vendorFeedOnly"]
+
+            if ga["canonicalDisplayName"].present? &&
+               (!llm_is_networked || c["displayName"].to_s.match?(HALLUCINATED_OUT_OF_SCOPE_PATTERN))
+              spatial_match = c["displayName"].to_s.match(/\A(\[[^\]]+\]\s*)/)
+              prefix = (audited_candidates.size > 1 && spatial_match) ? spatial_match[1] : ""
+              c["displayName"] = "#{prefix}#{ga['canonicalDisplayName']}"
+            end
+            if !llm_is_networked || c["reasoning"].to_s.match?(HALLUCINATED_OUT_OF_SCOPE_PATTERN) ||
+               c["reasoning"].to_s == "Identified from visual chassis and clues."
+              c["reasoning"] = "Identified #{c['displayName']} (#{ga['inferredPurl']}) in SureThingNet Insights Gold Catalog."
+            end
+          end
+
+          if !llm_is_networked || result["visualSummary"].to_s.match?(HALLUCINATED_OUT_OF_SCOPE_PATTERN)
+            result["visualSummary"] = "Identified #{aligned_top['displayName']} (#{top_purl}) in SureThingNet Insights Gold Catalog."
+          end
+          result["reasoning"] = aligned_top["reasoning"] if aligned_top
+          if !llm_is_networked && result["nextNarrowingQuestion"].to_s.match?(HALLUCINATED_OUT_OF_SCOPE_PATTERN)
+            result["nextNarrowingQuestion"] = "Confirm the matched hardware candidate below or add another identifier."
+          end
+        end
 
         latency_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_monotonic) * 1000).round
         top_candidate = audited_candidates.first || {}
@@ -544,7 +602,8 @@ module Discovery
       )
         clean_identifiers = Array(extracted_identifiers).map(&:to_s).map(&:strip).reject(&:empty?).uniq
         clean_clues = Array(user_clue_notes).map(&:to_s).map(&:strip).reject(&:empty?).uniq
-        norm_status = DiscoverySession::VALID_RESOLUTION_STATUSES.include?(resolution_status.to_s) ? resolution_status.to_s : "confirmed_candidate"
+        valid_statuses = defined?(DiscoverySession) ? DiscoverySession::VALID_RESOLUTION_STATUSES : %w[confirmed_candidate pivoted_to_barcode pivoted_to_manual abandoned]
+        norm_status = valid_statuses.include?(resolution_status.to_s) ? resolution_status.to_s : "confirmed_candidate"
         resolved_final_mode = final_mode.presence || (case norm_status
                                                       when "pivoted_to_barcode" then "barcode_scan"
                                                       when "pivoted_to_manual" then "manual_agent"
@@ -684,7 +743,7 @@ module Discovery
         fcc_candidates = []
         fcc_candidates << normalized_clues.dig(:object, "fccId").to_s.strip
         flat_list.each do |item|
-          item.to_s.scan(/\b(?:FCC\s*ID\s*[:#\-]?\s*)?([A-Z0-9]{3,5}-[A-Z0-9\-_]{2,14}|(?:SWX|PY3|MSQ|TE7|TVE|I88|KA2|Q87|WR9|BCG|A3L|NKR|BEJ|LDK|UID|IHD|SBV|JPZ)[A-Z0-9]{4,14})\b/i).flatten.each do |fid|
+          item.to_s.scan(/\b(?:FCC\s*ID\s*[:#\-]?\s*)?([A-Z0-9]{3,5}-[A-Z0-9\-_]{2,14}|(?:SWX|PY3|MSQ|TE7|TVE|I88|KA2|Q87|WR9|BCG|A3L|NKR|BEJ|LDK|UID|IHD|SBV|JPZ|B3Q|BKM|AZD|IYL)[A-Z0-9]{4,14})\b/i).flatten.each do |fid|
             fcc_candidates << fid
           end
         end
@@ -1306,10 +1365,13 @@ module Discovery
           - NO CROSS-CHASSIS FEATURE BLEEDING OR REFLECTION CONFUSION: Never merge ports, LEDs, or logos from an adjacent peripheral chassis or a mirrored reflection on a glossy side panel onto the central device.
           - Set "multipleDevicesDetected": true whenever 2 or more distinct physical hardware chassis/units are visible in the photo. List the central device as Candidate #1 and any peripheral/adjacent device as Candidate #2/#3 with spatial tags in displayName (e.g. "[Center] ...", "[Left Edge] ...").
           - Inspect rotated/vertical module stickers, FCC IDs, silkscreened board numbers, and SBC/PCB layouts carefully.
+          - CLOSE-UP MODEL BADGES & NETWORKED APPLIANCE SCOPE:
+            - Networked hardware in scope ("isNetworkedDevice": true) includes routers, modems, switches, APs, NAS/servers, UPS backups, smart-home hubs/cameras/thermostats, AND networked printers/MFPs/scanners (e.g. Sharp MX/BP series, Brother HL/MFC, HP LaserJet/OfficeJet, Epson EcoTank, Canon imageCLASS, Lexmark, Bambu Lab 3D printers).
+            - When a photo is a close-up of a brand/model nameplate badge, front-panel emblem, or regulatory sticker mounted on a larger chassis (for example, a brushed-silver SHARP MX-M453N badge on a ribbed office copier/MFP panel), identify the full host appliance represented by that printed model number. Never mistake a close-up nameplate badge for an "IR remote module" or standalone non-networked sensor, and never fabricate an unverified product category in "outOfScopeReason" when only a close-up badge is visible.
           Return ONLY a valid JSON object with the exact following keys:
           - "visualSummary": concise 1-sentence summary of all hardware devices and clues visible
-          - "isNetworkedDevice": boolean (true if the primary device has Wi-Fi, Ethernet, cellular, or network interface capability; false if it is a non-networked object or Bluetooth-only peripheral)
-          - "outOfScopeReason": string or null (if isNetworkedDevice is false, a concise 1-sentence explanation of what was identified and why it is outside SureThingNet's Wi-Fi/Ethernet network hardware scope; otherwise null)
+          - "isNetworkedDevice": boolean (true if the primary device has Wi-Fi, Ethernet, cellular, or network interface capability—including networked printers/MFPs; false ONLY if it is clearly a non-networked object or Bluetooth-only peripheral)
+          - "outOfScopeReason": string or null (if isNetworkedDevice is false, a concise 1-sentence explanation grounded strictly in visually verifiable facts without guessing a false category for a printed model badge; otherwise null)
           - "multipleDevicesDetected": boolean (true if 2+ distinct hardware chassis/enclosures are visible in the frame)
           - "candidates": array of up to 3 objects (Candidate #1 MUST be the central device), each with exact keys:
             - "manufacturer": string
@@ -1480,7 +1542,7 @@ module Discovery
           plain = cleaned_part.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
           [norm, plain].each do |s|
             next if s.length < 2
-            next if %w[device unknown unknown-model unidentified-hardware generic mini-pc router switch nas modem].include?(s)
+            next if %w[device unknown unknown-model unidentified-hardware generic mini-pc router switch nas modem printer scanner].include?(s)
 
             slugs << s
             base = s.sub(/-(100nas|200nas|us|eu|uk|au|ca|v\d+)\z/, "")
@@ -1528,6 +1590,24 @@ module Discovery
           has_specific_model && !m_slug.include?("macos") ? "pkg:generic/apple/#{m_slug}" : "pkg:generic/apple/macos"
         elsif v_down.include?("nintendo")
           "pkg:generic/nintendo/horizon-os"
+        elsif v_down.include?("brother")
+          cleaned = m_slug.sub(/\Abrother-/, "")
+          "pkg:generic/brother/#{cleaned.presence || m_slug}"
+        elsif v_down.include?("epson")
+          cleaned = m_slug.sub(/\Aepson-/, "")
+          "pkg:generic/epson/#{cleaned.presence || m_slug}"
+        elsif v_down.include?("canon")
+          cleaned = m_slug.sub(/\Acanon-/, "")
+          "pkg:generic/canon/#{cleaned.presence || m_slug}"
+        elsif v_down.include?("lexmark")
+          cleaned = m_slug.sub(/\Alexmark-/, "")
+          "pkg:generic/lexmark/#{cleaned.presence || m_slug}"
+        elsif v_down.include?("bambu")
+          cleaned = m_slug.sub(/\Abambu-lab-/, "").sub(/\Abambu-/, "")
+          "pkg:generic/bambu-lab/#{cleaned.presence || m_slug}"
+        elsif v_down == "hp" || v_down.include?("hewlett")
+          cleaned = m_slug.sub(/\Ahp-/, "")
+          "pkg:generic/hp/#{cleaned.presence || m_slug}"
         else
           "pkg:generic/#{v_slug}/#{m_slug}"
         end
@@ -1553,13 +1633,16 @@ module Discovery
         []
       end
 
-      def audit_candidates_against_gold_datalake(candidates, trace: nil)
+      def audit_candidates_against_gold_datalake(candidates, is_networked_device: true, trace: nil)
         feeds = load_gold_feeds_raw
         releases = load_gold_releases_raw
         idx_map = confirmed_catalog_index
         confirmed_entries = idx_map[:entries]
 
-        Array(candidates).map.with_index(1) do |cand, idx|
+        raw_list = Array(candidates)
+        strip_single_spatial = raw_list.size == 1
+
+        raw_list.map.with_index(1) do |cand, idx|
           vendor = cand["manufacturer"].to_s
           model = cand["modelNumber"].to_s
           os_details = cand["suggestedOsDetails"].to_s
@@ -1582,9 +1665,10 @@ module Discovery
             matched_feed && r["canonical_feed_slug"] == matched_feed["slug"]
           end
 
-          in_builtin = BUILT_IN_CATALOG_SIGNATURES.any? do |sig|
+          matched_builtin = BUILT_IN_CATALOG_SIGNATURES.find do |sig|
             "#{vendor} #{model} #{cand['displayName']}".match?(sig[:pattern])
           end
+          in_builtin = !matched_builtin.nil?
 
           candidate_slugs = extract_candidate_model_slugs(model)
           matched_confirmed = idx_map[:by_purl][inferred_purl.downcase]
@@ -1650,6 +1734,12 @@ module Discovery
                               "Raw LLM candidate '#{vendor} #{model}' (#{inferred_purl}) has no matching model or vendor PURL prefix in Gold Datalake"
                             end
 
+          canonical_display_name = if aligned
+                                     matched_confirmed&.dig("display_name").presence || matched_builtin&.dig(:display_name)
+                                   end
+          canonical_category = matched_builtin&.dig(:category) ||
+                               CATEGORY_CODE_LABELS[matched_confirmed&.dig("category_code")]
+
           alignment = {
             "aligned" => aligned,
             "vendorFeedOnly" => vendor_feed_only,
@@ -1661,6 +1751,7 @@ module Discovery
             "inBuiltInCatalog" => in_builtin,
             "inConfirmedCatalog" => in_confirmed,
             "categoryCode" => matched_confirmed && matched_confirmed["category_code"],
+            "canonicalDisplayName" => canonical_display_name,
             "upcGtin" => matched_confirmed && matched_confirmed["upc_gtin"],
             "fccId" => matched_confirmed && matched_confirmed["fcc_id"],
             "fccGrantee" => matched_confirmed && matched_confirmed["fcc_grantee"],
@@ -1673,7 +1764,34 @@ module Discovery
             "Candidate ##{idx}: #{vendor} #{model} (#{cand['confidencePercent']}%) -> #{alignment['statusLabel']} | #{diagnostic_note}"
           )
 
-          cand.merge("goldAlignment" => alignment)
+          raw_display = cand["displayName"].to_s
+          spatial_match = raw_display.match(/\A(\[[^\]]+\]\s*)/)
+          spatial_prefix = (!strip_single_spatial && spatial_match) ? spatial_match[1] : ""
+          cleaned_display = if strip_single_spatial && cand["displayName"].is_a?(String)
+                              raw_display.sub(/\A\[(?:Center|Foreground|Main|Middle)\]\s*/i, "")
+                            else
+                              cand["displayName"]
+                            end
+          final_display = if aligned && canonical_display_name.present? &&
+                             (raw_display.strip.empty? || !is_networked_device || raw_display.match?(HALLUCINATED_OUT_OF_SCOPE_PATTERN))
+                            "#{spatial_prefix}#{canonical_display_name}"
+                          else
+                            cleaned_display
+                          end
+          final_category = if (aligned || vendor_feed_only) && canonical_category.present? &&
+                              (!is_networked_device || cand["deviceCategory"].to_s.strip.empty? ||
+                               cand["deviceCategory"] == "Network Hardware" ||
+                               cand["deviceCategory"].to_s.match?(HALLUCINATED_OUT_OF_SCOPE_PATTERN))
+                             canonical_category
+                           else
+                             cand["deviceCategory"]
+                           end
+
+          cand.merge(
+            "displayName" => final_display,
+            "deviceCategory" => final_category,
+            "goldAlignment" => alignment
+          )
         end
       end
 

@@ -10,13 +10,13 @@ module DataLake
       CatalogRelease.delete_all
 
       result = DataLake::GoldSyncJob.perform_now
-      assert_equal 22, result[:canonical_feeds_synced]
+      assert_equal 23, result[:canonical_feeds_synced]
       assert_equal 16, result[:curated_bulletins_synced]
-      assert_equal 34, result[:catalog_releases_synced]
+      assert_equal 39, result[:catalog_releases_synced]
 
-      assert_equal 22, CanonicalFeed.count
+      assert_equal 23, CanonicalFeed.count
       assert_equal 16, CuratedBulletin.count
-      assert_equal 34, CatalogRelease.count
+      assert_equal 39, CatalogRelease.count
 
       kev = CuratedBulletin.find_by(external_id: "CVE-2026-21099")
       assert_not_nil kev
@@ -25,9 +25,9 @@ module DataLake
 
       # Second run is idempotent (updates in-place without duplicating rows)
       DataLake::GoldSyncJob.perform_now
-      assert_equal 22, CanonicalFeed.count
+      assert_equal 23, CanonicalFeed.count
       assert_equal 16, CuratedBulletin.count
-      assert_equal 34, CatalogRelease.count
+      assert_equal 39, CatalogRelease.count
     end
   end
 end

@@ -12,7 +12,10 @@
       "pkg:generic/baseus/",
       "pkg:generic/jackery/",
       "pkg:generic/ugreen/",
-      "pkg:generic/mophie/"
+      "pkg:generic/mophie/",
+      "pkg:generic/lexmark/ms725dvn",
+      "pkg:generic/lexmark/mx725adve",
+      "pkg:generic/bambu-lab/a1"
     ]
   },
   {
@@ -241,6 +244,28 @@
     ]
   },
   {
+    "id": "0192d9f0-feed-7000-8000-000000000021",
+    "slug": "network-printer-firmware-psirt",
+    "pro_name": "Network Printer & MFP Firmware / PSIRT Advisories",
+    "stn_name": "Brother, HP, Epson, Canon & 3D Printer Updates",
+    "feed_category": "advisory",
+    "purl_prefixes": [
+      "pkg:generic/brother/",
+      "pkg:generic/epson/",
+      "pkg:generic/canon/",
+      "pkg:generic/lexmark/",
+      "pkg:generic/xerox/",
+      "pkg:generic/ricoh/",
+      "pkg:generic/kyocera/",
+      "pkg:generic/sharp/",
+      "pkg:generic/bambu-lab/",
+      "pkg:generic/hp/laserjet",
+      "pkg:generic/hp/color-laserjet",
+      "pkg:generic/hp/officejet",
+      "pkg:generic/hp/envy"
+    ]
+  },
+  {
     "id": "0192d9f0-feed-7000-8000-000000000018",
     "slug": "nas-homelab-storage",
     "pro_name": "QNAP QTS, TrueNAS SCALE & Linux Server Advisories",
@@ -280,7 +305,6 @@
       "pkg:generic/wyze/",
       "pkg:generic/shelly/",
       "pkg:generic/aqara/",
-      "pkg:generic/brother/",
       "pkg:generic/samsung-galaxy/",
       "pkg:generic/google-pixel/"
     ]

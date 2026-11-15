@@ -1,31 +1,29 @@
 {
-  "datalake_version": "2.1.1",
-  "dag_version": "2.1.1",
+  "datalake_version": "2.1.0",
+  "dag_version": "2.1.0",
   "schema_version": "2.0.0",
   "retention_policy": "US_10YR_TOMBSTONE_COMPACTION_15YR_IDENTITY",
-  "generated_at": "2026-11-12T02:00:43Z",
+  "generated_at": "2026-11-15T06:34:51Z",
   "enricher_provider": "elastix",
   "enricher_model": "gpt-oss-120b",
   "counts": {
-    "matchable_products": 10065,
-    "fcc_grantees": 170,
-    "canonical_feeds": 22,
-    "catalog_releases": 34,
-    "remediation_playbooks": 951,
-    "curated_bulletins": 7481
+    "matchable_products": 10124,
+    "fcc_grantees": 176,
+    "canonical_feeds": 23,
+    "catalog_releases": 39,
+    "remediation_playbooks": 957,
+    "curated_bulletins": 7516
   },
   "artifacts": {
-    "canonical_feeds.json": "sha256:a8b9483268c75e78595a7e321bf1a97e6585f8b8d257b0bfdefc5faa5080b0ed",
-    "catalog_releases.json": "sha256:3b37367208872420e0a807abda5a924ec50a13f1fa8fc4a3eb16a98af3c99458",
+    "canonical_feeds.json": "sha256:a55b40caf84d77795c56e3759e1bb1149ca2c3a80001ab735afedff8ef797da6",
+    "catalog_releases.json": "sha256:6e359e935aeb27c38ee0420396cdebe17513159de3edc2ee7e05ddeec557be96",
     "curated_bulletins.json": "sha256:2ac8192838b5302d95ac83d4b1d32db2ee5d9a4fedd58035adf1a9647abab214",
-    "confirmed_hardware_identifiers.json": "sha256:2c620ca9a03f5aa2c4976c97e934affc5a3a1369aac217027f53a0540b13a889",
-    "bq_matchable_products.jsonl": "sha256:73c4df6066029ff229065c6788a9ac14ddccc01b1b76801ad3413939d34d21b1",
-    "bq_remediation_playbooks.jsonl": "sha256:0f85370842f75867879725980b18d2724771c8bd7f4a928ad3de87ab9735c0ae",
-    "bq_curated_bulletins.jsonl": "sha256:aeb09e135bb0f5267ef76b9c5c47bfff60bf23265984d9d0370efde6a5ea3d25",
+    "confirmed_hardware_identifiers.json": "sha256:d721b4baf327a0820cbaeb11e533dfd6f968ce2fe3be7d03b79dedb32ea32713",
+    "bq_matchable_products.jsonl": "sha256:b4d4fdadee55d5ad777e5944d3f88b23e80fcc0233846ecd7cdbe72e5f37c18c",
+    "bq_remediation_playbooks.jsonl": "sha256:fb62557c1cc59746549932687378a8983a4d270dfdef134c6d323e7d4791fcf8",
+    "bq_curated_bulletins.jsonl": "sha256:5e544b0fc7919bbfdd24e9a9378f0afc14273a66eaaa8f0a9a2c211ccc350634",
     "deterministic_ingestion_dag.yaml": "sha256:8ec6c50e1fc1b4bf96b32219a68bf65b12f17f252179602f35ea7d2344947f67",
     "bulletin_refinement_dag.yaml": "sha256:530b8c7a524ba6de2db66cc96185db7667fb006c340e8cd6112f2657463b46cc"
   },
-  "manifest_digest": "sha256:193f77fce4e03c79bdbe15f2a5f28f37240752ab1c3adbd2002476fbe7280679",
-  "released_at": "2026-11-12T02:00:46Z",
-  "release_notes": "Split Unraid OS releases and Nintendo Switch updates into separate canonical feeds"
+  "manifest_digest": "sha256:90e2a373d36fcd345afe9366bde1cc5ef0fa877efaa163a4b4446a59b1233995"
 }

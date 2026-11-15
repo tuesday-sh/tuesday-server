@@ -320,4 +320,98 @@ class HardwareVisionServiceTest < Minitest::Test
     assert_equal "pkg:generic/synology/ds220-plus", audited[2].dig("goldAlignment", "inferredPurl")
     assert_equal "pkg:generic/motorola/mb7420", audited[3].dig("goldAlignment", "inferredPurl")
   end
+
+  def test_network_printer_gold_alignment_and_fcc_short_circuit
+    # 1. FCC ID B3Q-HLL2350DW (Brother HL-L2350DW) short-circuits in 0 LLM turns
+    res = Discovery::HardwareVisionService.analyze(
+      session_id: "test-printer-fcc",
+      extracted_identifiers: ["FCC ID: B3Q-HLL2350DW"],
+      debug: false
+    )
+    assert_equal true, res["shortCircuited"]
+    assert_equal "Brother", res["vendor"]
+    assert_equal "HL-L2350DW", res["model"]
+    assert_equal "GOLD ALIGNED", res.dig("candidates", 0, "goldAlignment", "statusLabel")
+    assert_equal "network-printer-firmware-psirt", res.dig("candidates", 0, "goldAlignment", "matchedFeedSlug")
+
+    # 2. Printer PURL inference & Gold alignment across Brother, HP, Epson, Canon, and Bambu Lab
+    candidates = [
+      { "manufacturer" => "Brother", "modelNumber" => "HL-L2350DW", "displayName" => "Brother HL-L2350DW", "suggestedOsDetails" => "Firmware", "confidencePercent" => 95 },
+      { "manufacturer" => "HP", "modelNumber" => "HP LaserJet Pro M404dn", "displayName" => "HP LaserJet Pro M404dn", "suggestedOsDetails" => "Firmware", "confidencePercent" => 92 },
+      { "manufacturer" => "Epson", "modelNumber" => "EcoTank ET-2850", "displayName" => "Epson EcoTank ET-2850", "suggestedOsDetails" => "Firmware", "confidencePercent" => 90 },
+      { "manufacturer" => "Canon", "modelNumber" => "imageCLASS MF656Cdw", "displayName" => "Canon imageCLASS MF656Cdw", "suggestedOsDetails" => "Firmware", "confidencePercent" => 90 },
+      { "manufacturer" => "Bambu Lab", "modelNumber" => "X1-Carbon", "displayName" => "Bambu Lab X1-Carbon", "suggestedOsDetails" => "Firmware", "confidencePercent" => 88 },
+      { "manufacturer" => "Bambu Lab", "modelNumber" => "A1", "displayName" => "Bambu Lab A1", "suggestedOsDetails" => "Firmware", "confidencePercent" => 88 }
+    ]
+
+    audited = Discovery::HardwareVisionService.send(:audit_candidates_against_gold_datalake, candidates)
+    audited[0..4].each do |c|
+      assert_equal "GOLD ALIGNED", c.dig("goldAlignment", "statusLabel"), "Expected #{c['manufacturer']} #{c['modelNumber']} to be GOLD ALIGNED"
+      assert_equal "network-printer-firmware-psirt", c.dig("goldAlignment", "matchedFeedSlug")
+    end
+    assert_equal "GOLD ALIGNED", audited[5].dig("goldAlignment", "statusLabel")
+    assert_equal "cpsc-safety", audited[5].dig("goldAlignment", "matchedFeedSlug")
+    assert_equal "pkg:generic/hp/laserjet-pro-m404dn", audited[1].dig("goldAlignment", "inferredPurl")
+    assert_equal "pkg:generic/bambu-lab/x1-carbon", audited[4].dig("goldAlignment", "inferredPurl")
+    assert_equal "pkg:generic/bambu-lab/a1", audited[5].dig("goldAlignment", "inferredPurl")
+  end
+
+  def test_gold_alignment_overrides_false_out_of_scope_and_repairs_hallucinated_badge_description
+    raw_llm_json = JSON.generate({
+      "visualSummary" => "A small square brushed-silver Sharp MX-M453N module with a blue leaf-shaped indicator light, mounted on a ribbed white surface.",
+      "isNetworkedDevice" => false,
+      "outOfScopeReason" => "The Sharp MX-M453N is an infrared remote-control receiver/transmitter module with no Wi-Fi or Ethernet networking capability.",
+      "multipleDevicesDetected" => false,
+      "candidates" => [
+        {
+          "manufacturer" => "Sharp",
+          "modelNumber" => "MX-M453N",
+          "displayName" => "[Center] Sharp MX-M453N IR remote module",
+          "confidencePercent" => 92
+        }
+      ]
+    })
+
+    svc_singleton = Discovery::HardwareVisionService.singleton_class
+    original_call_elastix = Discovery::HardwareVisionService.method(:call_elastix_chat_completions)
+    svc_singleton.define_method(:call_elastix_chat_completions) do |*_args, **_kwargs|
+      clues = { object: {}, flat_list: [] }
+      {
+        result: Discovery::HardwareVisionService.send(:parse_turn_json, raw_llm_json, clues),
+        raw_text: raw_llm_json,
+        usage: { input_tokens: 1000, output_tokens: 120, cache_read_tokens: 0 },
+        model: "qwen3.8-27b"
+      }
+    end
+
+    Dir.mktmpdir do |tmpdir|
+      ENV["BRONZE_LAKE_DIR"] = tmpdir
+      result = Discovery::HardwareVisionService.analyze(
+        session_id: "test-sharp-badge-override",
+        turn_index: 1,
+        client_platform: "android",
+        device_id: "pixel-5",
+        provider_override: "auto",
+        extracted_identifiers: [],
+        images_base64: ["dGVzdF9zaGFycF9iYWRnZQ=="],
+        debug: false
+      )
+
+      assert_equal true, result["isNetworkedDevice"]
+      assert_nil result["outOfScopeReason"]
+
+      top = result["candidates"].first
+      assert_equal true, top.dig("goldAlignment", "aligned")
+      assert_equal "GOLD ALIGNED", top.dig("goldAlignment", "statusLabel")
+      assert_equal "pkg:generic/sharp/mx-m453n", top.dig("goldAlignment", "inferredPurl")
+      assert_equal "Sharp MX-M453N Monochrome Network Multifunction Printer", top["displayName"]
+      refute_match(/ir remote|infrared|remote module/i, top["displayName"])
+      refute_match(/ir remote|infrared|remote module/i, top["reasoning"])
+      refute_match(/small square|ir remote|infrared|remote module/i, result["visualSummary"])
+    end
+  ensure
+    if svc_singleton && original_call_elastix
+      svc_singleton.define_method(:call_elastix_chat_completions, original_call_elastix)
+    end
+  end
 end

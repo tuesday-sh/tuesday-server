@@ -304,5 +304,50 @@
     "bump_classification": "patch",
     "released_at": "2026-10-11T00:00:00Z",
     "eol_date": "2030-10-01T00:00:00Z"
+  },
+  {
+    "purl_base": "pkg:generic/brother/hl-l2350dw",
+    "canonical_feed_slug": "network-printer-firmware-psirt",
+    "version": "1.44",
+    "release_channel": "stable",
+    "bump_classification": "patch",
+    "released_at": "2026-09-10T00:00:00Z",
+    "eol_date": "2030-01-01T00:00:00Z"
+  },
+  {
+    "purl_base": "pkg:generic/hp/laserjet-pro-4001dw",
+    "canonical_feed_slug": "network-printer-firmware-psirt",
+    "version": "6.17.5.2116",
+    "release_channel": "stable",
+    "bump_classification": "patch",
+    "released_at": "2026-10-15T00:00:00Z",
+    "eol_date": "2031-01-01T00:00:00Z"
+  },
+  {
+    "purl_base": "pkg:generic/epson/ecotank-et-2850",
+    "canonical_feed_slug": "network-printer-firmware-psirt",
+    "version": "05.52.XF05O2",
+    "release_channel": "stable",
+    "bump_classification": "patch",
+    "released_at": "2026-08-22T00:00:00Z",
+    "eol_date": "2030-06-01T00:00:00Z"
+  },
+  {
+    "purl_base": "pkg:generic/canon/imageclass-mf656cdw",
+    "canonical_feed_slug": "network-printer-firmware-psirt",
+    "version": "03.11",
+    "release_channel": "stable",
+    "bump_classification": "minor",
+    "released_at": "2026-10-03T00:00:00Z",
+    "eol_date": "2031-06-01T00:00:00Z"
+  },
+  {
+    "purl_base": "pkg:generic/bambu-lab/x1-carbon",
+    "canonical_feed_slug": "network-printer-firmware-psirt",
+    "version": "01.08.02.00",
+    "release_channel": "stable",
+    "bump_classification": "minor",
+    "released_at": "2026-10-20T00:00:00Z",
+    "eol_date": "2029-12-31T00:00:00Z"
   }
 ]
