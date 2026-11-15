@@ -414,4 +414,140 @@ class HardwareVisionServiceTest < Minitest::Test
       svc_singleton.define_method(:call_elastix_chat_completions, original_call_elastix)
     end
   end
+
+  def test_top_us_networked_printers_short_circuit_and_gold_align
+    printers = [
+      { clue: "Xerox VersaLink C405dn", vendor: "Xerox", model: "VersaLink C405dn" },
+      { clue: "Ricoh IM C3000", vendor: "Ricoh", model: "IM C3000" },
+      { clue: "Konica Minolta bizhub C360i", vendor: "Konica Minolta", model: "bizhub C360i" },
+      { clue: "Kyocera ECOSYS M2540dw", vendor: "Kyocera", model: "ECOSYS M2540dw" },
+      { clue: "Canon imageRUNNER ADVANCE DX C3830i", vendor: "Canon", model: "imageRUNNER ADVANCE DX C3830i" },
+      { clue: "HP OfficeJet Pro 9125e", vendor: "HP", model: "OfficeJet Pro 9125e" },
+      { clue: "Brother HL-L2460DW", vendor: "Brother", model: "HL-L2460DW" },
+      { clue: "Zebra ZD421", vendor: "Zebra", model: "ZD421" },
+      { clue: "Bambu Lab P1S", vendor: "Bambu Lab", model: "P1S" },
+      { clue: "Original Prusa MK4S", vendor: "Prusa", model: "MK4S" },
+      { clue: "Creality K1 Max", vendor: "Creality", model: "K1 Max" }
+    ]
+
+    printers.each_with_index do |spec, idx|
+      res = Discovery::HardwareVisionService.analyze(
+        session_id: "test-us-printer-#{idx}",
+        provider_override: "auto",
+        extracted_identifiers: ["Model: #{spec[:clue]}"],
+        debug: false
+      )
+
+      assert_equal true, res["shortCircuited"], "Expected short-circuit for #{spec[:clue]}"
+      assert_equal "CatalogCache", res["providerUsed"], "Expected CatalogCache for #{spec[:clue]}"
+      assert_equal true, res["isNetworkedDevice"], "Expected isNetworkedDevice=true for #{spec[:clue]}"
+      assert_nil res["outOfScopeReason"], "Expected nil outOfScopeReason for #{spec[:clue]}"
+      assert_equal spec[:vendor], res["vendor"], "Vendor mismatch for #{spec[:clue]}"
+      assert_includes res["model"].downcase, spec[:model].downcase, "Model mismatch for #{spec[:clue]}"
+
+      top = res.dig("candidates", 0)
+      refute_nil top, "Expected top candidate for #{spec[:clue]}"
+      assert_equal true, top.dig("goldAlignment", "aligned"), "Expected aligned=true for #{spec[:clue]}"
+      assert_equal "GOLD ALIGNED", top.dig("goldAlignment", "statusLabel"), "Expected GOLD ALIGNED for #{spec[:clue]}"
+    end
+  end
+
+  def test_usb_only_printers_are_excluded_from_short_circuit_and_gold_alignment
+    usb_only_candidates = [
+      {
+        "manufacturer" => "Brother",
+        "modelNumber" => "HL-L2400D",
+        "displayName" => "Brother HL-L2400D USB Mono Laser Printer",
+        "deviceCategory" => "Printer",
+        "confidencePercent" => 95,
+        "reasoning" => "USB-only mono laser printer without Ethernet or Wi-Fi.",
+        "suggestedHostname" => "brother-hll2400d",
+        "suggestedOsDetails" => "Embedded Printer",
+        "suggestedPackageManager" => "firmware"
+      },
+      {
+        "manufacturer" => "HP",
+        "modelNumber" => "LaserJet Pro M404d",
+        "displayName" => "HP LaserJet Pro M404d USB Printer",
+        "deviceCategory" => "Printer",
+        "confidencePercent" => 95,
+        "reasoning" => "USB-only HP LaserJet Pro M404d without network interface.",
+        "suggestedHostname" => "hp-m404d",
+        "suggestedOsDetails" => "Embedded Printer",
+        "suggestedPackageManager" => "firmware"
+      }
+    ]
+
+    audited = Discovery::HardwareVisionService.send(
+      :audit_candidates_against_gold_datalake,
+      usb_only_candidates
+    )
+
+    audited.each do |candidate|
+      ga = candidate["goldAlignment"]
+      assert_equal false, ga["aligned"], "USB-only #{candidate['modelNumber']} must not align"
+      assert_equal false, ga["vendorFeedOnly"], "USB-only #{candidate['modelNumber']} must not claim vendorFeedOnly"
+      assert_equal "UNALIGNED RAW MATCH", ga["statusLabel"], "USB-only #{candidate['modelNumber']} statusLabel mismatch"
+    end
+
+    svc_singleton = Discovery::HardwareVisionService.singleton_class
+    original_call_elastix = Discovery::HardwareVisionService.method(:call_elastix_chat_completions)
+
+    [
+      { vendor: "Brother", model: "HL-L2400D", clue: "Model: Brother HL-L2400D", reason: "Brother HL-L2400D is a USB-only printer without Wi-Fi or Ethernet networking." },
+      { vendor: "HP", model: "LaserJet Pro M404d", clue: "Model: HP LaserJet Pro M404d", reason: "HP LaserJet Pro M404d is a USB-only printer with no network interface." }
+    ].each_with_index do |spec, idx|
+      elastix_calls = 0
+      svc_singleton.define_method(:call_elastix_chat_completions) do |**_kwargs|
+        elastix_calls += 1
+        raw_payload = {
+          "isNetworkedDevice" => false,
+          "outOfScopeReason" => spec[:reason],
+          "visualSummary" => "Monochrome laser printer with USB-B port only.",
+          "multipleDevicesDetected" => false,
+          "extractedIdentifiers" => { "modelNumber" => spec[:model] },
+          "candidates" => [
+            {
+              "manufacturer" => spec[:vendor],
+              "modelNumber" => spec[:model],
+              "displayName" => "#{spec[:vendor]} #{spec[:model]}",
+              "deviceCategory" => "Printer",
+              "confidencePercent" => 94,
+              "reasoning" => spec[:reason],
+              "suggestedHostname" => "usb-printer",
+              "suggestedOsDetails" => "Embedded Printer",
+              "suggestedPackageManager" => "firmware"
+            }
+          ]
+        }
+        {
+          result: raw_payload,
+          raw_text: JSON.generate(raw_payload),
+          model: "qwen3.8-27b",
+          usage: { input_tokens: 120, output_tokens: 45, cache_read_tokens: 0 }
+        }
+      end
+
+      Dir.mktmpdir do |tmpdir|
+        ENV["BRONZE_LAKE_DIR"] = tmpdir
+        res = Discovery::HardwareVisionService.analyze(
+          session_id: "test-usb-only-printer-#{idx}",
+          provider_override: "elastix",
+          extracted_identifiers: [spec[:clue]],
+          debug: false
+        )
+
+        assert_equal 1, elastix_calls, "USB-only #{spec[:model]} must NOT short-circuit Step 1"
+        assert_equal false, res["shortCircuited"], "USB-only #{spec[:model]} must have shortCircuited=false"
+        assert_equal false, res["isNetworkedDevice"], "USB-only #{spec[:model]} must retain isNetworkedDevice=false"
+        assert_equal spec[:reason], res["outOfScopeReason"], "USB-only #{spec[:model]} must preserve outOfScopeReason"
+        assert_equal false, res.dig("candidates", 0, "goldAlignment", "aligned")
+        assert_equal false, res.dig("candidates", 0, "goldAlignment", "vendorFeedOnly")
+      end
+    end
+  ensure
+    if svc_singleton && original_call_elastix
+      svc_singleton.define_method(:call_elastix_chat_completions, original_call_elastix)
+    end
+  end
 end

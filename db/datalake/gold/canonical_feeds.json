@@ -256,13 +256,20 @@
       "pkg:generic/lexmark/",
       "pkg:generic/xerox/",
       "pkg:generic/ricoh/",
+      "pkg:generic/konica-minolta/",
       "pkg:generic/kyocera/",
       "pkg:generic/sharp/",
+      "pkg:generic/zebra/",
+      "pkg:generic/rollo/",
       "pkg:generic/bambu-lab/",
+      "pkg:generic/prusa/",
+      "pkg:generic/creality/",
       "pkg:generic/hp/laserjet",
       "pkg:generic/hp/color-laserjet",
       "pkg:generic/hp/officejet",
-      "pkg:generic/hp/envy"
+      "pkg:generic/hp/envy",
+      "pkg:generic/hp/deskjet",
+      "pkg:generic/hp/smart-tank"
     ]
   },
   {

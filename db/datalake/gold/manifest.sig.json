@@ -3,27 +3,27 @@
   "dag_version": "2.1.0",
   "schema_version": "2.0.0",
   "retention_policy": "US_10YR_TOMBSTONE_COMPACTION_15YR_IDENTITY",
-  "generated_at": "2026-11-15T06:34:51Z",
+  "generated_at": "2026-11-15T07:34:11Z",
   "enricher_provider": "elastix",
   "enricher_model": "gpt-oss-120b",
   "counts": {
-    "matchable_products": 10124,
-    "fcc_grantees": 176,
+    "matchable_products": 10299,
+    "fcc_grantees": 181,
     "canonical_feeds": 23,
-    "catalog_releases": 39,
+    "catalog_releases": 46,
     "remediation_playbooks": 957,
     "curated_bulletins": 7516
   },
   "artifacts": {
-    "canonical_feeds.json": "sha256:a55b40caf84d77795c56e3759e1bb1149ca2c3a80001ab735afedff8ef797da6",
-    "catalog_releases.json": "sha256:6e359e935aeb27c38ee0420396cdebe17513159de3edc2ee7e05ddeec557be96",
-    "curated_bulletins.json": "sha256:2ac8192838b5302d95ac83d4b1d32db2ee5d9a4fedd58035adf1a9647abab214",
-    "confirmed_hardware_identifiers.json": "sha256:d721b4baf327a0820cbaeb11e533dfd6f968ce2fe3be7d03b79dedb32ea32713",
-    "bq_matchable_products.jsonl": "sha256:b4d4fdadee55d5ad777e5944d3f88b23e80fcc0233846ecd7cdbe72e5f37c18c",
-    "bq_remediation_playbooks.jsonl": "sha256:fb62557c1cc59746549932687378a8983a4d270dfdef134c6d323e7d4791fcf8",
-    "bq_curated_bulletins.jsonl": "sha256:5e544b0fc7919bbfdd24e9a9378f0afc14273a66eaaa8f0a9a2c211ccc350634",
+    "canonical_feeds.json": "sha256:171c2be0b3fe23432686fdb1caf81da74b90c04e7af5f326fdfe06d45e4f8b78",
+    "catalog_releases.json": "sha256:6f1ea15befe86120ea93313fee4c45a9133d929208c2a46d38c5c435278900ae",
+    "curated_bulletins.json": "sha256:582f02fc1403bc97b0b74aad6685cabede5d6b14511965ca760163b7ba4b6672",
+    "confirmed_hardware_identifiers.json": "sha256:f8cd6d91ea630d6556340d0620f6a688298727265598daa2149da805c25d51fa",
+    "bq_matchable_products.jsonl": "sha256:58174c8e6849670adb10cdb47b260c514bf647d9f2eccb62cdd53bab85888cc2",
+    "bq_remediation_playbooks.jsonl": "sha256:5d75022dc310aad2555a78c96d74f77a5af23b42b731fdc8e984194fc3dea8a7",
+    "bq_curated_bulletins.jsonl": "sha256:8fc4634998697b663ecc9d112e936312644e9d0ce5966322c86834f3579918b5",
     "deterministic_ingestion_dag.yaml": "sha256:8ec6c50e1fc1b4bf96b32219a68bf65b12f17f252179602f35ea7d2344947f67",
     "bulletin_refinement_dag.yaml": "sha256:530b8c7a524ba6de2db66cc96185db7667fb006c340e8cd6112f2657463b46cc"
   },
-  "manifest_digest": "sha256:90e2a373d36fcd345afe9366bde1cc5ef0fa877efaa163a4b4446a59b1233995"
+  "manifest_digest": "sha256:43e434f5fbd4b3085bf488d105c20e8520495a1029fc50efad40d5b402d2cd73"
 }

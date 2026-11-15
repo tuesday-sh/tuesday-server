@@ -223,7 +223,7 @@ module Notifications
           exact = devices.find do |dev|
             dev.purls_list.any? do |dp|
               clean_dp = dp.to_s.downcase.split("@").first.sub(/\/\*$/, "")
-              clean_dp == clean_bp || clean_dp.start_with?("#{clean_bp}/") || clean_bp.start_with?("#{clean_dp}/")
+              clean_dp == clean_bp || clean_dp.start_with?(clean_bp) || clean_bp.start_with?(clean_dp)
             end
           end
           return exact if exact

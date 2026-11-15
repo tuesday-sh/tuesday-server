@@ -2,6 +2,7 @@
 
 require "minitest/autorun"
 require_relative "../../../app/services/bulletins/inbox_assembler"
+require_relative "../../../app/services/bulletins/gold_snapshot_loader"
 
 class BulletinsInboxAssemblerTest < Minitest::Test
   def setup
@@ -312,5 +313,58 @@ class BulletinsInboxAssemblerTest < Minitest::Test
     assert_equal true, linked_res[:ai_summary][:phone_a_friend_advisor][:advisor_invoked]
     assert_equal true, linked_res[:ai_summary][:phone_a_friend_advisor][:delegated_to_pro_dashboard]
     assert_includes linked_res[:ai_summary][:phone_a_friend_advisor][:summary], "Tuesday.sh Pro dashboard"
+  end
+
+  def test_networked_printers_surface_gold_advisories_and_cpsc_recalls
+    lake_dir = ENV.fetch("GOLD_LAKE_DIR", Bulletins::GoldSnapshotLoader::DEFAULT_LAKE_DIR)
+    skip "Gold lake directory not present (#{lake_dir})" unless File.exist?(File.join(lake_dir, "curated_bulletins.json"))
+
+    printers = [
+      Bulletins::InboxAssembler::TrackedDeviceStruct.new(
+        id: "prt-brother",
+        port_index: 1,
+        short_label: "HL-L2350DW",
+        purls: ["pkg:generic/brother/hl-l2350dw@1.0.0"],
+        confidence_tier: :confirmed
+      ),
+      Bulletins::InboxAssembler::TrackedDeviceStruct.new(
+        id: "prt-sharp",
+        port_index: 2,
+        short_label: "MX-M453N",
+        purls: ["pkg:generic/sharp/mx-m453n@1.0.0"],
+        confidence_tier: :confirmed
+      ),
+      Bulletins::InboxAssembler::TrackedDeviceStruct.new(
+        id: "prt-hp",
+        port_index: 3,
+        short_label: "LaserJet Pro",
+        purls: ["pkg:generic/hp/laserjet-pro-4001dw@1.0.0"],
+        confidence_tier: :confirmed
+      ),
+      Bulletins::InboxAssembler::TrackedDeviceStruct.new(
+        id: "prt-bambu",
+        port_index: 4,
+        short_label: "Bambu A1",
+        purls: ["pkg:generic/bambu-lab/a1@1.0.0"],
+        confidence_tier: :confirmed
+      )
+    ]
+
+    result = Bulletins::GoldSnapshotLoader.assemble_bulletins_from_gold(
+      app_flavor: "tuesday",
+      muted_feed_slugs: [],
+      tracked_devices: printers,
+      lake_dir: lake_dir
+    )
+
+    feed_slugs = result[:matched_feeds].map { |f| f[:slug] }
+    assert_includes feed_slugs, "network-printer-firmware-psirt"
+    assert_includes feed_slugs, "cpsc-safety"
+
+    inbox_ids = result[:inbox].map { |i| i[:external_id] }
+    assert_includes inbox_ids, "CVE-2024-51978-brother-passbroke"
+    assert_includes inbox_ids, "CVE-2024-39620-sharp-mx-bp-osa"
+    assert_includes inbox_ids, "CVE-2023-1707-hp-laserjet-officejet"
+    assert_includes inbox_ids, "CPSC-24264-bambu-a1"
   end
 end

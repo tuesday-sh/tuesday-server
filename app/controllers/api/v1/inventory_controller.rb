@@ -59,16 +59,29 @@ module Api
                           resolved_gold[:category_code].presence || params[:category_code].presence || "C8"
                         end
 
+        confidence = params[:confidence_tier].presence || "confirmed"
+        requested_port_state = params[:port_state].presence
+        initial_port_state = if (requested_port_state.nil? || requested_port_state == "ok") && confidence == "confirmed"
+                               infer_initial_port_state_for_purls(effective_purls)
+                             else
+                               requested_port_state || "ok"
+                             end
+
+        raw_short_label = params[:short_label].presence
+        raw_short_label = nil if raw_short_label.to_s.casecmp("device.local").zero?
+        raw_name = params[:name].presence
+        raw_name = nil if raw_name.to_s.casecmp("device.local").zero?
+
         device = site.monitored_devices.build(
           external_uuid: params[:id].presence || SecureRandom.uuid,
           port_index: next_port,
           category_code: effective_cat,
           trust_zone: params[:trust_zone].presence || "z1_trusted",
-          port_state: params[:port_state].presence || "ok",
-          confidence_tier: params[:confidence_tier].presence || "confirmed",
+          port_state: initial_port_state,
+          confidence_tier: confidence,
           asset_tag: params[:asset_tag],
-          short_label: params[:short_label].presence || params[:model_number].presence || params[:name].to_s[0, 14],
-          name: params[:name].presence || "#{params[:vendor]} #{params[:model_number]}".strip,
+          short_label: raw_short_label || params[:model_number].presence || raw_name.to_s[0, 14],
+          name: raw_name || "#{params[:vendor]} #{params[:model_number]}".strip,
           vendor: params[:vendor],
           model_number: params[:model_number],
           room_location: params[:room_location].presence || "Rack / Room",
@@ -250,6 +263,23 @@ module Api
         Telemetry::HostedAiLogger.log_product_event(ev.to_telemetry_hash)
       rescue StandardError => e
         Rails.logger.warn("[Api::V1::InventoryController] Telemetry emit skipped: #{e.message}")
+      end
+
+      def infer_initial_port_state_for_purls(purls)
+        clean_purls = Array(purls).map { |dp| dp.to_s.downcase.split("@").first.sub(/\/\*$/, "") }.reject(&:blank?)
+        return "ok" if clean_purls.empty?
+
+        matched = Bulletins::GoldSnapshotLoader.load_gold_bulletins.select do |b|
+          clean_bp = b.purl_base.to_s.downcase.split("@").first
+          clean_bp.present? && clean_purls.any? { |clean_dp| clean_bp.start_with?(clean_dp) || clean_dp.start_with?(clean_bp) }
+        end
+        return "ok" if matched.empty?
+        return "eol" if matched.any? { |b| b.bulletin_type.to_s.downcase == "eol" }
+        return "cve_kev" if matched.any?(&:is_high_sev)
+
+        "update"
+      rescue StandardError
+        "ok"
       end
 
       def serialize_site(site)

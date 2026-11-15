@@ -130,17 +130,229 @@ module Discovery
         reasoning: "Matched Zigbee Coordinator identifier in Gold Hardware Catalog ($0.00 short-circuit)."
       },
       {
-        pattern: /\b(MX-?M453N|MX-?M363N|MX-?4101N|BP-?70C45)\b/i,
+        pattern: /\b(MX-?\d{4}N?|MX-?M\d{3,4}N?|BP-?(?:50|70)[CM]\d{2})\b/i,
         vendor: "Sharp",
         model: "MX-M453N",
         display_name: "Sharp MX-M453N Network Multifunction Printer",
+        display_suffix: "Network Multifunction Printer",
+        preserve_matched_model: true,
         category: "IoT / Printer",
-        hostname: "sharp-mx-m453n",
+        hostname: "sharp-mfp",
         os_details: "Sharp OSA / MFP Firmware",
         pkg_manager: "firmware",
         lifecycle_tier: "active",
         trust_zone: "z3_iot",
         reasoning: "Matched Sharp MX/BP Network Multifunction Printer identifier in Gold Hardware Catalog ($0.00 short-circuit)."
+      },
+      {
+        pattern: /\b((?:HL|MFC|DCP)-?[LJ]\d{4}[A-Z0-9]*?(?:DWXL|CDW|DW|DN|W))\b/i,
+        vendor: "Brother",
+        model: "HL-L2350DW",
+        display_name: "Brother Wireless Network Laser Printer",
+        display_suffix: "Wireless Network Printer",
+        preserve_matched_model: true,
+        category: "IoT / Printer",
+        hostname: "brother-printer",
+        os_details: "Brother Embedded Firmware",
+        pkg_manager: "firmware",
+        lifecycle_tier: "active",
+        trust_zone: "z3_iot",
+        reasoning: "Matched Brother wireless/Ethernet networked printer identifier in Gold Hardware Catalog ($0.00 short-circuit)."
+      },
+      {
+        pattern: /\b(LaserJet\s+(?:(?:Color|Pro|Enterprise|MFP)\s+)*[A-Z]?\d{3,4}(?:fdw|fdn|dw|dn|w)|OfficeJet\s*Pro\s*\d{4}e?|ENVY\s*(?:Inspire\s*)?\d{4}e?|Smart\s*Tank\s*(?:5101|6001|7001|7301|7602)|DeskJet\s*(?:2755e|2855e|4155e|4255e))\b/i,
+        vendor: "HP",
+        model: "LaserJet Pro M404dn",
+        display_name: "HP Network Printer",
+        display_suffix: "Network Printer",
+        preserve_matched_model: true,
+        category: "IoT / Printer",
+        hostname: "hp-printer",
+        os_details: "HP FutureSmart / Printer Firmware",
+        pkg_manager: "firmware",
+        lifecycle_tier: "active",
+        trust_zone: "z3_iot",
+        reasoning: "Matched HP networked LaserJet/OfficeJet/Smart Tank/DeskJet printer in Gold Hardware Catalog ($0.00 short-circuit)."
+      },
+      {
+        pattern: /\b((?:EcoTank\s*(?:Pro\s*|Photo\s*)?)?ET-?\d{4}|(?:WorkForce\s*(?:Pro\s*)?)?WF-?\d{4}|Expression\s*(?:Home|Photo)\s*XP-?\d{4})\b/i,
+        vendor: "Epson",
+        model: "EcoTank ET-2850",
+        display_name: "Epson EcoTank / WorkForce Network Printer",
+        display_suffix: "Network Printer",
+        preserve_matched_model: true,
+        category: "IoT / Printer",
+        hostname: "epson-printer",
+        os_details: "Epson Embedded Printer Firmware",
+        pkg_manager: "firmware",
+        lifecycle_tier: "active",
+        trust_zone: "z3_iot",
+        reasoning: "Matched Epson networked EcoTank/WorkForce/Expression printer in Gold Hardware Catalog ($0.00 short-circuit)."
+      },
+      {
+        pattern: /\b(imageCLASS\s*(?:MF|LBP)\d{3,4}[A-Za-z]*(?:cdw|dw|w)|(?:MF|LBP)\d{3,4}[A-Za-z]*(?:cdw|dw)|imageRUNNER(?:\s*ADVANCE)?(?:\s*DX)?\s*C?\d{4}[A-Za-z]*|PIXMA\s*(?:TR|TS|G|MG)\d{4}[a-z]?|MAXIFY\s*GX\d{4})\b/i,
+        vendor: "Canon",
+        model: "imageCLASS MF656Cdw",
+        display_name: "Canon imageCLASS / imageRUNNER / PIXMA Network Printer",
+        display_suffix: "Network Printer",
+        preserve_matched_model: true,
+        category: "IoT / Printer",
+        hostname: "canon-printer",
+        os_details: "Canon Printer Firmware",
+        pkg_manager: "firmware",
+        lifecycle_tier: "active",
+        trust_zone: "z3_iot",
+        reasoning: "Matched Canon networked imageCLASS/imageRUNNER/PIXMA/MAXIFY printer in Gold Hardware Catalog ($0.00 short-circuit)."
+      },
+      {
+        pattern: /\b(VersaLink\s*[BC]\d{3,4}[a-z]*|AltaLink\s*[BC]\d{4}|WorkCentre\s*\d{4}[a-z]*|Xerox\s+[BC]2\d{2}dni)\b/i,
+        vendor: "Xerox",
+        model: "VersaLink C405dn",
+        display_name: "Xerox VersaLink / AltaLink Network MFP",
+        display_suffix: "Network Multifunction Printer",
+        preserve_matched_model: true,
+        category: "IoT / Printer",
+        hostname: "xerox-mfp",
+        os_details: "Xerox ConnectKey Firmware",
+        pkg_manager: "firmware",
+        lifecycle_tier: "active",
+        trust_zone: "z3_iot",
+        reasoning: "Matched Xerox VersaLink/AltaLink/WorkCentre networked MFP in Gold Hardware Catalog ($0.00 short-circuit)."
+      },
+      {
+        pattern: /\b((?:Ricoh\s*)?(?:IM\s*C?\d{3,4}[A-Za-z]*|MP\s*C?\d{4}[A-Za-z]*)|Ricoh\s*(?:SP|P)\s*C?\d{3}[A-Za-z]*)\b/i,
+        vendor: "Ricoh",
+        model: "IM C3000",
+        display_name: "Ricoh IM / MP Series Network MFP",
+        display_suffix: "Network Multifunction Printer",
+        preserve_matched_model: true,
+        category: "IoT / Printer",
+        hostname: "ricoh-mfp",
+        os_details: "Ricoh Always Current Technology Firmware",
+        pkg_manager: "firmware",
+        lifecycle_tier: "active",
+        trust_zone: "z3_iot",
+        reasoning: "Matched Ricoh IM/MP networked MFP in Gold Hardware Catalog ($0.00 short-circuit)."
+      },
+      {
+        pattern: /\b(bizhub\s*C?\d{3,4}[ie]?)\b/i,
+        vendor: "Konica Minolta",
+        model: "bizhub C360i",
+        display_name: "Konica Minolta bizhub Network MFP",
+        display_suffix: "Network Multifunction Printer",
+        preserve_matched_model: true,
+        category: "IoT / Printer",
+        hostname: "konica-minolta-bizhub",
+        os_details: "Konica Minolta bizhub i-Series Firmware",
+        pkg_manager: "firmware",
+        lifecycle_tier: "active",
+        trust_zone: "z3_iot",
+        reasoning: "Matched Konica Minolta bizhub networked MFP in Gold Hardware Catalog ($0.00 short-circuit)."
+      },
+      {
+        pattern: /\b(ECOSYS\s*(?:M|P|MA|PA)\d{4}[a-z]*|TASKalfa\s*\d{4}ci)\b/i,
+        vendor: "Kyocera",
+        model: "ECOSYS M2540dw",
+        display_name: "Kyocera ECOSYS / TASKalfa Network Printer",
+        display_suffix: "Network Multifunction Printer",
+        preserve_matched_model: true,
+        category: "IoT / Printer",
+        hostname: "kyocera-printer",
+        os_details: "Kyocera HyPAS / ECOSYS Firmware",
+        pkg_manager: "firmware",
+        lifecycle_tier: "active",
+        trust_zone: "z3_iot",
+        reasoning: "Matched Kyocera ECOSYS/TASKalfa networked printer in Gold Hardware Catalog ($0.00 short-circuit)."
+      },
+      {
+        pattern: /\b((?:MS|MX|MC|CX|MB)\d{3,4}[a-z]*(?:adve|adw|dvn|dwe|dw|i))\b/i,
+        vendor: "Lexmark",
+        model: "MS725dvn",
+        display_name: "Lexmark Network Laser Printer",
+        display_suffix: "Network Laser Printer",
+        preserve_matched_model: true,
+        category: "IoT / Printer",
+        hostname: "lexmark-printer",
+        os_details: "Lexmark Embedded Firmware",
+        pkg_manager: "firmware",
+        lifecycle_tier: "active",
+        trust_zone: "z3_iot",
+        reasoning: "Matched Lexmark networked enterprise/workgroup printer in Gold Hardware Catalog ($0.00 short-circuit)."
+      },
+      {
+        pattern: /\b(ZD410|ZD420|ZD421|ZD620|ZD621|ZT230|ZT410|ZT411)\b/i,
+        vendor: "Zebra",
+        model: "ZD421",
+        display_name: "Zebra Link-OS Network Thermal Label Printer",
+        display_suffix: "Link-OS Network Label Printer",
+        preserve_matched_model: true,
+        category: "IoT / Printer",
+        hostname: "zebra-label-printer",
+        os_details: "Zebra Link-OS Firmware",
+        pkg_manager: "firmware",
+        lifecycle_tier: "active",
+        trust_zone: "z3_iot",
+        reasoning: "Matched Zebra Link-OS networked label printer in Gold Hardware Catalog ($0.00 short-circuit)."
+      },
+      {
+        pattern: /\b(Rollo\s*(?:Wireless\s*)?X1040|Wireless\s*X1040)\b/i,
+        vendor: "Rollo",
+        model: "Wireless X1040",
+        display_name: "Rollo Wireless X1040 Wi-Fi Thermal Label Printer",
+        display_suffix: "Wi-Fi Thermal Label Printer",
+        preserve_matched_model: true,
+        category: "IoT / Printer",
+        hostname: "rollo-x1040",
+        os_details: "Rollo Wireless Label Firmware",
+        pkg_manager: "firmware",
+        lifecycle_tier: "active",
+        trust_zone: "z3_iot",
+        reasoning: "Matched Rollo Wireless X1040 Wi-Fi label printer in Gold Hardware Catalog ($0.00 short-circuit)."
+      },
+      {
+        pattern: /\b(X1-?Carbon|X1C|X1E|P1S|P1P|A1\s*mini|Bambu\s*Lab\s*A1)\b/i,
+        vendor: "Bambu Lab",
+        model: "X1-Carbon",
+        display_name: "Bambu Lab Wi-Fi 3D Printer",
+        display_suffix: "Wi-Fi 3D Printer",
+        preserve_matched_model: true,
+        category: "IoT / Printer",
+        hostname: "bambu-lab-printer",
+        os_details: "Bambu Lab Wi-Fi Firmware",
+        pkg_manager: "firmware",
+        lifecycle_tier: "active",
+        trust_zone: "z3_iot",
+        reasoning: "Matched Bambu Lab Wi-Fi 3D printer in Gold Hardware Catalog ($0.00 short-circuit)."
+      },
+      {
+        pattern: /(?:^|[^a-zA-Z0-9])((?:Original\s*Prusa\s*)?(?:MK4S?|CORE\s*One|Prusa\s*XL|Prusa\s*MINI\+?))(?:$|[^a-zA-Z0-9])/i,
+        vendor: "Prusa",
+        model: "MK4S",
+        display_name: "Original Prusa PrusaLink Network 3D Printer",
+        display_suffix: "PrusaLink Network 3D Printer",
+        preserve_matched_model: true,
+        category: "IoT / Printer",
+        hostname: "prusa-3d-printer",
+        os_details: "Prusa Buddy / PrusaLink Firmware",
+        pkg_manager: "firmware",
+        lifecycle_tier: "active",
+        trust_zone: "z3_iot",
+        reasoning: "Matched Original Prusa PrusaLink networked 3D printer in Gold Hardware Catalog ($0.00 short-circuit)."
+      },
+      {
+        pattern: /\b(Creality\s*(?:K1(?:\s*Max|C)?|K2\s*Plus|Ender-?3\s*V3(?:\s*KE)?)|K1\s*Max|K1C|K2\s*Plus|Ender-?3\s*V3(?:\s*KE)?)\b/i,
+        vendor: "Creality",
+        model: "K1 Max",
+        display_name: "Creality Klipper Wi-Fi 3D Printer",
+        display_suffix: "Klipper Wi-Fi 3D Printer",
+        preserve_matched_model: true,
+        category: "IoT / Printer",
+        hostname: "creality-3d-printer",
+        os_details: "Creality OS / Klipper Firmware",
+        pkg_manager: "firmware",
+        lifecycle_tier: "active",
+        trust_zone: "z3_iot",
+        reasoning: "Matched Creality Klipper Wi-Fi 3D printer in Gold Hardware Catalog ($0.00 short-circuit)."
       }
     ].freeze
 
@@ -795,6 +1007,9 @@ module Discovery
           )
         end
 
+        # USB-only / non-networked printers must never short-circuit as supported Gold network printers
+        return nil if usb_only_printer_model?(vendor: joined, model: joined)
+
         # 1c. Exact user-confirmed identifier lookup
         token_candidates = []
         token_candidates << normalized_clues.dig(:object, "modelNumber").to_s.strip
@@ -828,13 +1043,29 @@ module Discovery
 
         # 2. Check built-in Gold Catalog hardware patterns
         BUILT_IN_CATALOG_SIGNATURES.each do |sig|
-          if joined.match?(sig[:pattern])
+          if (m = joined.match(sig[:pattern]))
+            matched_token = m[1].to_s.strip.presence || m[0].to_s.strip
+            extracted_model = if sig[:preserve_matched_model] && matched_token.present?
+                                cleaned = matched_token.sub(/\A(?:Original\s+Prusa|Konica\s+Minolta|Bambu\s+Lab|Creality|#{Regexp.escape(sig[:vendor])})\s+/i, "").strip
+                                cleaned.presence || sig[:model]
+                              else
+                                sig[:model]
+                              end
+            next if usb_only_printer_model?(vendor: sig[:vendor], model: extracted_model)
+
+            disp_name = if sig[:preserve_matched_model] && !extracted_model.casecmp?(sig[:model])
+                          suffix = sig[:display_suffix].presence || sig[:category]
+                          "#{sig[:vendor]} #{extracted_model} #{suffix}".squeeze(" ").strip
+                        else
+                          sig[:display_name]
+                        end
+            host_slug = "#{sig[:vendor].to_s.downcase.gsub(/[^a-z0-9]+/, '-')}-#{extracted_model.downcase.gsub(/[^a-z0-9]+/, '-')}".gsub(/\A-+|-+\z/, "")
             return build_catalog_turn_payload(
               vendor: sig[:vendor],
-              model: sig[:model],
-              display_name: sig[:display_name],
+              model: extracted_model,
+              display_name: disp_name,
               category: sig[:category],
-              hostname: sig[:hostname],
+              hostname: host_slug.presence || sig[:hostname],
               os_details: sig[:os_details],
               pkg_manager: sig[:pkg_manager],
               confidence_pct: 96,
@@ -847,20 +1078,23 @@ module Discovery
           end
         end
 
-        # 3. Check 7,161+ Gold Catalog SKU model_slug index
+        # 3. Check Gold Catalog SKU model_slug index
         token_candidates.reject { |t| t.length < 4 }.uniq.each do |token|
+          next if usb_only_printer_model?(vendor: joined, model: token)
+
           slug = token.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
           next if slug.length < 4
 
           entry = idx[:by_model_slug][slug]
           next unless entry
+          next if usb_only_printer_model?(vendor: entry["vendor"], model: entry["model"])
 
           cat_label = CATEGORY_CODE_LABELS[entry["category_code"]] || "Verified Network / IoT Hardware"
           model_display = entry["model"].to_s
           return build_catalog_turn_payload(
             vendor: entry["vendor"],
             model: model_display,
-            display_name: "#{entry['brand'] || entry['vendor']} #{model_display}",
+            display_name: entry["display_name"].presence || "#{entry['brand'] || entry['vendor']} #{model_display}",
             category: cat_label,
             hostname: entry["model"].to_s.downcase.gsub(/[^a-z0-9]+/, "-"),
             os_details: "Verified Tuesday Gold Catalog Device (#{entry['canonical_purl']})",
@@ -1366,11 +1600,12 @@ module Discovery
           - Set "multipleDevicesDetected": true whenever 2 or more distinct physical hardware chassis/units are visible in the photo. List the central device as Candidate #1 and any peripheral/adjacent device as Candidate #2/#3 with spatial tags in displayName (e.g. "[Center] ...", "[Left Edge] ...").
           - Inspect rotated/vertical module stickers, FCC IDs, silkscreened board numbers, and SBC/PCB layouts carefully.
           - CLOSE-UP MODEL BADGES & NETWORKED APPLIANCE SCOPE:
-            - Networked hardware in scope ("isNetworkedDevice": true) includes routers, modems, switches, APs, NAS/servers, UPS backups, smart-home hubs/cameras/thermostats, AND networked printers/MFPs/scanners (e.g. Sharp MX/BP series, Brother HL/MFC, HP LaserJet/OfficeJet, Epson EcoTank, Canon imageCLASS, Lexmark, Bambu Lab 3D printers).
+            - Networked hardware in scope ("isNetworkedDevice": true) includes routers, modems, switches, APs, NAS/servers, UPS backups, smart-home hubs/cameras/thermostats, AND networked printers/MFPs/label/3D printers (models with Wi-Fi W/DW/CDW/e, Ethernet N/DN/i, AirPrint, Link-OS, PrusaLink, or Klipper — e.g. Sharp MX/BP, Brother HL-L/MFC-L W/DW/CDW, HP LaserJet w/dw/dn/fdw or OfficeJet/ENVY/DeskJet/Smart Tank e-series, Epson EcoTank/WorkForce, Canon imageCLASS/imageRUNNER/PIXMA, Xerox VersaLink/AltaLink, Ricoh IM/MP, Konica Minolta bizhub, Kyocera ECOSYS/TASKalfa, Lexmark, Zebra Link-OS, Bambu Lab, Prusa, Creality).
+            - STRICT USB-ONLY PRINTER EXCLUSION: Printers that are strictly USB-only or duplex-only without Wi-Fi or Ethernet (for example, Brother HL-L2300D / HL-L2320D / HL-L2400D ending in D without W/N, HP LaserJet M404d / M110 without w/n, Canon LBP6030 without w / PIXMA TS302, Rollo X1038) MUST have "isNetworkedDevice": false.
             - When a photo is a close-up of a brand/model nameplate badge, front-panel emblem, or regulatory sticker mounted on a larger chassis (for example, a brushed-silver SHARP MX-M453N badge on a ribbed office copier/MFP panel), identify the full host appliance represented by that printed model number. Never mistake a close-up nameplate badge for an "IR remote module" or standalone non-networked sensor, and never fabricate an unverified product category in "outOfScopeReason" when only a close-up badge is visible.
           Return ONLY a valid JSON object with the exact following keys:
           - "visualSummary": concise 1-sentence summary of all hardware devices and clues visible
-          - "isNetworkedDevice": boolean (true if the primary device has Wi-Fi, Ethernet, cellular, or network interface capability—including networked printers/MFPs; false ONLY if it is clearly a non-networked object or Bluetooth-only peripheral)
+          - "isNetworkedDevice": boolean (true if the primary device has Wi-Fi, Ethernet, cellular, or network interface capability—including networked printers/MFPs; false if it is a USB-only printer, Bluetooth-only peripheral, or non-networked object)
           - "outOfScopeReason": string or null (if isNetworkedDevice is false, a concise 1-sentence explanation grounded strictly in visually verifiable facts without guessing a false category for a printed model badge; otherwise null)
           - "multipleDevicesDetected": boolean (true if 2+ distinct hardware chassis/enclosures are visible in the frame)
           - "candidates": array of up to 3 objects (Candidate #1 MUST be the central device), each with exact keys:
@@ -1432,14 +1667,21 @@ module Discovery
         candidates = Array(json["candidates"]).map do |c|
           os_raw = c["suggestedOsDetails"]
           os_str = os_raw.is_a?(Hash) ? "#{os_raw['osName']} #{os_raw['osVersion']}".strip : os_raw.to_s
+          display_name = c["displayName"].presence || "#{c['manufacturer']} #{c['modelNumber']}".strip.presence || "Network Hardware"
+          raw_host = c["suggestedHostname"].presence
+          suggested_host = if raw_host && !raw_host.to_s.casecmp("device.local").zero?
+                             raw_host
+                           else
+                             display_name.sub(/\A\[[^\]]+\]\s*/, "")
+                           end
           {
             "manufacturer" => c["manufacturer"].presence || "Unknown Vendor",
             "modelNumber" => c["modelNumber"].presence || "Unknown Model",
-            "displayName" => c["displayName"].presence || "#{c['manufacturer']} #{c['modelNumber']}".strip,
+            "displayName" => display_name,
             "deviceCategory" => c["deviceCategory"].presence || "Network Hardware",
             "confidencePercent" => (c["confidencePercent"] || 70).to_i.clamp(1, 99),
             "reasoning" => c["reasoning"].presence || "Identified from visual chassis and clues.",
-            "suggestedHostname" => c["suggestedHostname"].presence || "device.local",
+            "suggestedHostname" => suggested_host,
             "suggestedOsDetails" => os_str.presence || "Linux / Embedded Firmware",
             "suggestedPackageManager" => c["suggestedPackageManager"].presence || "firmware"
           }
@@ -1602,15 +1844,73 @@ module Discovery
         elsif v_down.include?("lexmark")
           cleaned = m_slug.sub(/\Alexmark-/, "")
           "pkg:generic/lexmark/#{cleaned.presence || m_slug}"
+        elsif v_down.include?("xerox")
+          cleaned = m_slug.sub(/\Axerox-/, "")
+          "pkg:generic/xerox/#{cleaned.presence || m_slug}"
+        elsif v_down.include?("ricoh")
+          cleaned = m_slug.sub(/\Aricoh-/, "")
+          "pkg:generic/ricoh/#{cleaned.presence || m_slug}"
+        elsif v_down.include?("konica")
+          cleaned = m_slug.sub(/\Akonica-(?:minolta-)?/, "")
+          "pkg:generic/konica-minolta/#{cleaned.presence || m_slug}"
+        elsif v_down.include?("kyocera")
+          cleaned = m_slug.sub(/\Akyocera-/, "")
+          "pkg:generic/kyocera/#{cleaned.presence || m_slug}"
+        elsif v_down.include?("sharp")
+          cleaned = m_slug.sub(/\Asharp-/, "")
+          "pkg:generic/sharp/#{cleaned.presence || m_slug}"
+        elsif v_down.include?("zebra")
+          cleaned = m_slug.sub(/\Azebra-/, "")
+          "pkg:generic/zebra/#{cleaned.presence || m_slug}"
+        elsif v_down.include?("rollo")
+          cleaned = m_slug.sub(/\Arollo-/, "")
+          "pkg:generic/rollo/#{cleaned.presence || m_slug}"
         elsif v_down.include?("bambu")
           cleaned = m_slug.sub(/\Abambu-lab-/, "").sub(/\Abambu-/, "")
           "pkg:generic/bambu-lab/#{cleaned.presence || m_slug}"
+        elsif v_down.include?("prusa")
+          cleaned = m_slug.sub(/\Aoriginal-prusa-/, "").sub(/\Aprusa-/, "")
+          "pkg:generic/prusa/#{cleaned.presence || m_slug}"
+        elsif v_down.include?("creality")
+          cleaned = m_slug.sub(/\Acreality-/, "")
+          "pkg:generic/creality/#{cleaned.presence || m_slug}"
         elsif v_down == "hp" || v_down.include?("hewlett")
           cleaned = m_slug.sub(/\Ahp-/, "")
           "pkg:generic/hp/#{cleaned.presence || m_slug}"
         else
           "pkg:generic/#{v_slug}/#{m_slug}"
         end
+      end
+
+      def usb_only_printer_model?(vendor:, model:)
+        v_down = vendor.to_s.downcase
+        m_str = model.to_s.strip
+        ctx = "#{vendor} #{model}"
+        return false if ctx.strip.empty?
+
+        # Brother duplex/basic USB-only laser printers (HL-L2300D, HL-L2320D, HL-L2400D, DCP-L2520D, HL-2240D)
+        if m_str.match?(/\b(?:HL|DCP|MFC)-?(?:[LJ])?\d{4}D(?:XL)?\b/i)
+          return true
+        end
+
+        # HP USB-only LaserJet printers (M404d, M402d, M203d, 4001d, M15a, M110 / P1102 / 1020 without w/dw/n/dn)
+        if v_down == "hp" || v_down.include?("hewlett") || ctx.match?(/\b(?:laserjet|hp)\b/i)
+          return true if m_str.match?(/\b(?:M\d{3,4}|P\d{4}|[234]\d{3})d\b/i)
+          return true if ctx.match?(/\blaserjet\b/i) && m_str.match?(/\b(?:M110a?|M140a?|M15a?|P1102|P1005|P1006|1018|1020|1022)\b(?!\s*(?:w|nw|dw|n|dn)\b)/i)
+        end
+
+        # Canon USB-only LBP6030 (non-w) & USB-only PIXMA models (TS302, iP2820, MG2520/MG2522)
+        if v_down.include?("canon") || ctx.match?(/\b(?:canon|pixma|imageclass|lbp)\b/i)
+          return true if m_str.match?(/\bLBP-?6030b?\b(?!\s*w\b)/i)
+          return true if m_str.match?(/\b(?:TS302|IP2820|MG2520|MG2522|MG2525)\b/i)
+        end
+
+        # Rollo X1038 (USB-only) vs Wireless X1040
+        if v_down.include?("rollo") && m_str.match?(/\bX1038\b/i)
+          return true
+        end
+
+        false
       end
 
       def load_gold_feeds_raw
@@ -1649,37 +1949,50 @@ module Discovery
           inferred_purl = infer_candidate_purl(vendor: vendor, model: model, os_details: os_details)
           model_slug = model.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
           vendor_slug = vendor.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
+          is_usb_only = usb_only_printer_model?(vendor: vendor, model: "#{model} #{cand['displayName']}")
 
-          matched_feed = feeds.find do |f|
-            Array(f["purl_prefixes"]).any? do |prefix|
-              p_str = prefix.to_s
-              inferred_purl.start_with?(p_str) || p_str.start_with?(inferred_purl.split("/")[0..2].join("/"))
-            end
-          end
+          matched_feed = if is_usb_only
+                           nil
+                         else
+                           feeds.find do |f|
+                             Array(f["purl_prefixes"]).any? do |prefix|
+                               p_str = prefix.to_s
+                               inferred_purl.start_with?(p_str) || p_str.start_with?(inferred_purl.split("/")[0..2].join("/"))
+                             end
+                           end
+                         end
 
-          exact_release = releases.find do |r|
-            inferred_purl == r["purl_base"].to_s || inferred_purl.start_with?("#{r['purl_base']}/")
-          end
+          exact_release = if is_usb_only
+                            nil
+                          else
+                            releases.find do |r|
+                              inferred_purl == r["purl_base"].to_s || inferred_purl.start_with?("#{r['purl_base']}/")
+                            end
+                          end
 
           feed_release = exact_release || releases.find do |r|
             matched_feed && r["canonical_feed_slug"] == matched_feed["slug"]
           end
 
-          matched_builtin = BUILT_IN_CATALOG_SIGNATURES.find do |sig|
-            "#{vendor} #{model} #{cand['displayName']}".match?(sig[:pattern])
-          end
+          matched_builtin = if is_usb_only
+                              nil
+                            else
+                              BUILT_IN_CATALOG_SIGNATURES.find do |sig|
+                                "#{vendor} #{model} #{cand['displayName']}".match?(sig[:pattern])
+                              end
+                            end
           in_builtin = !matched_builtin.nil?
 
           candidate_slugs = extract_candidate_model_slugs(model)
-          matched_confirmed = idx_map[:by_purl][inferred_purl.downcase]
-          if matched_confirmed.nil?
+          matched_confirmed = is_usb_only ? nil : idx_map[:by_purl][inferred_purl.downcase]
+          if matched_confirmed.nil? && !is_usb_only
             candidate_slugs.each do |c_slug|
               matched_confirmed = idx_map[:by_purl]["pkg:generic/#{vendor_slug}/#{c_slug}"] ||
                                   (c_slug.length >= 3 && idx_map[:by_model_slug][c_slug])
               break if matched_confirmed
             end
           end
-          in_confirmed = !matched_confirmed.nil?
+          in_confirmed = !matched_confirmed.nil? && !is_usb_only
           if matched_confirmed && matched_confirmed["canonical_purl"].present? && (matched_feed.nil? || model.include?("/"))
             inferred_purl = matched_confirmed["canonical_purl"]
             matched_feed ||= feeds.find do |f|
@@ -1690,8 +2003,8 @@ module Discovery
             end
           end
 
-          exact_model_aligned = in_builtin || in_confirmed || !exact_release.nil?
-          vendor_feed_only = !exact_model_aligned && !matched_feed.nil?
+          exact_model_aligned = !is_usb_only && (in_builtin || in_confirmed || !exact_release.nil?)
+          vendor_feed_only = !is_usb_only && !exact_model_aligned && !matched_feed.nil?
           aligned = exact_model_aligned
 
           matched_prefix = if matched_feed
@@ -1726,7 +2039,9 @@ module Discovery
           note_parts << "Feed: #{matched_feed['slug']} (#{matched_prefix})" if matched_feed
           note_parts << "Gold Release: v#{feed_release['version']}" if feed_release
 
-          diagnostic_note = if aligned
+          diagnostic_note = if is_usb_only
+                              "Printer '#{vendor} #{model}' is a USB-only (non-networked) model and is excluded from Tuesday networked hardware scope."
+                            elsif aligned
                               "Exact model in Gold Catalog [#{note_parts.join(' • ')}]"
                             elsif vendor_feed_only
                               "Model '#{model}' (#{inferred_purl}) is NOT in Gold Hardware Catalog; only vendor prefix #{matched_prefix} matched feed #{matched_feed['slug']}"
@@ -1734,8 +2049,17 @@ module Discovery
                               "Raw LLM candidate '#{vendor} #{model}' (#{inferred_purl}) has no matching model or vendor PURL prefix in Gold Datalake"
                             end
 
+          builtin_fallback_name = if matched_builtin
+                                    if matched_builtin[:preserve_matched_model] && model.present?
+                                      cleaned_m = model.sub(/\A(?:Original\s+Prusa|Konica\s+Minolta|Bambu\s+Lab|Creality|#{Regexp.escape(matched_builtin[:vendor])})\s+/i, "").strip
+                                      suffix = matched_builtin[:display_suffix].presence || matched_builtin[:category]
+                                      "#{matched_builtin[:vendor]} #{cleaned_m} #{suffix}".squeeze(" ").strip
+                                    else
+                                      matched_builtin[:display_name]
+                                    end
+                                  end
           canonical_display_name = if aligned
-                                     matched_confirmed&.dig("display_name").presence || matched_builtin&.dig(:display_name)
+                                     matched_confirmed&.dig("display_name").presence || builtin_fallback_name
                                    end
           canonical_category = matched_builtin&.dig(:category) ||
                                CATEGORY_CODE_LABELS[matched_confirmed&.dig("category_code")]
