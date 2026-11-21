@@ -192,6 +192,116 @@ module Api
         }
       end
 
+      # GET /api/v1/notifications/rules
+      # Returns all declarative notification rules from config/notification_rules.yml.
+      def rules
+        render json: {
+          status: "ok",
+          count: Notifications::RuleRegistry.all.size,
+          rules: Notifications::RuleRegistry.all
+        }
+      end
+
+      # GET /api/v1/notifications/feed
+      # Canonical delta-sync feed for OS push, Bulletins, and Reminders.
+      def feed
+        site = current_network_site(auto_create: true)
+        since = params[:since].present? ? Time.zone.parse(params[:since].to_s) : nil
+        surface_filter = params[:surface].presence&.to_s
+        status_filter = params[:status].presence&.to_s || "unresolved"
+
+        scope = SiteNotification.includes(:monitored_device)
+                                .where(network_site_id: site.id)
+                                .updated_since(since)
+                                .order(created_at: :desc)
+
+        scope = scope.unresolved if status_filter == "unresolved"
+        scope = scope.where(status: status_filter) if SiteNotification::VALID_STATUSES.include?(status_filter)
+
+        records = scope.to_a
+        records = records.select { |r| r.targets_surface?(surface_filter) } if surface_filter.present?
+
+        render json: {
+          status: "ok",
+          networkSiteId: site.id,
+          syncedAt: Time.current.utc.iso8601,
+          count: records.size,
+          notifications: records.map(&:to_api_hash)
+        }
+      end
+
+      # PATCH /api/v1/notifications/:id
+      # Transitions a SiteNotification through the shared lifecycle (seen, snoozed, completed, dismissed, push_seen, reopen).
+      def update_state
+        site = current_network_site(auto_create: false)
+        record = SiteNotification.find_by(id: params[:id], network_site_id: site&.id) ||
+                 SiteNotification.find_by(id: params[:id])
+        return render json: { error: "Notification not found" }, status: :not_found if record.nil?
+
+        action = params[:action_type].presence || params[:status].presence
+        return render json: { error: "Missing action_type or status" }, status: :unprocessable_entity if action.blank?
+
+        record.transition!(action, snooze_minutes: params[:snooze_minutes])
+        render json: {
+          status: "ok",
+          notification: record.to_api_hash
+        }
+      rescue ArgumentError => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # POST /api/v1/notifications/test_rule
+      # Evaluates or previews a specific declarative rule_id (for Web Workbench rule testing).
+      def test_rule
+        site = current_network_site(auto_create: true)
+        rule_id = params[:rule_id].to_s
+        dry_run = ActiveModel::Type::Boolean.new.cast(params.fetch(:dry_run, false))
+        force = ActiveModel::Type::Boolean.new.cast(params.fetch(:force, true))
+        context = params[:context].is_a?(ActionController::Parameters) ? params[:context].to_unsafe_h : (params[:context] || {})
+        surfaces = params[:surfaces].present? ? Array(params[:surfaces]) : nil
+
+        result = Notifications::Engine.emit_for_rule!(
+          site: site,
+          rule_id: rule_id,
+          context: context,
+          surfaces_override: surfaces,
+          dedup_key: params[:dedup_key].presence,
+          dry_run: dry_run,
+          force: force
+        )
+
+        render json: {
+          status: "ok",
+          action: result[:action],
+          notification: result[:notification]
+        }
+      rescue ArgumentError => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
+      # POST /api/v1/notifications/broadcast
+      # Issues a manual/admin broadcast notification.
+      def broadcast
+        site = current_network_site(auto_create: true)
+        result = Notifications::Engine.emit_for_rule!(
+          site: site,
+          rule_id: "admin_broadcast",
+          context: {
+            "title" => params[:title].presence || "System Broadcast",
+            "body" => params[:body].presence || "Operational notice from Tuesday."
+          },
+          surfaces_override: params[:surfaces].present? ? Array(params[:surfaces]) : nil,
+          dedup_key: params[:dedup_key].presence || "admin_broadcast:#{Time.current.to_i}",
+          force: true
+        )
+
+        render json: {
+          status: "ok",
+          action: result[:action],
+          notification: result[:notification]
+        }
+      end
+
       private
 
       def resolve_client_device_id

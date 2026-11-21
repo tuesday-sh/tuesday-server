@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_11_13_211500) do
+ActiveRecord::Schema[7.2].define(version: 2026_11_21_204500) do
   create_table "api_keys", force: :cascade do |t|
     t.integer "bearer_id", null: false
     t.string "bearer_type", null: false
@@ -302,6 +302,35 @@ ActiveRecord::Schema[7.2].define(version: 2026_11_13_211500) do
     t.index ["session_id"], name: "index_product_telemetry_events_on_session_id"
   end
 
+  create_table "site_notifications", force: :cascade do |t|
+    t.integer "network_site_id", null: false
+    t.integer "monitored_device_id"
+    t.string "rule_id", null: false
+    t.string "trigger_type", null: false
+    t.string "dedup_key", null: false
+    t.text "surfaces_json", default: "[\"bulletin\"]", null: false
+    t.string "priority", default: "normal", null: false
+    t.string "status", default: "active", null: false
+    t.string "push_status", default: "none", null: false
+    t.string "title", null: false
+    t.text "body", null: false
+    t.string "cta_label"
+    t.string "deep_link_uri"
+    t.text "payload_json", default: "{}", null: false
+    t.datetime "snoozed_until"
+    t.datetime "expires_at"
+    t.datetime "seen_at"
+    t.datetime "resolved_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["monitored_device_id"], name: "index_site_notifications_on_monitored_device_id"
+    t.index ["network_site_id", "dedup_key"], name: "idx_site_notifications_site_dedup", unique: true
+    t.index ["network_site_id", "status", "updated_at"], name: "idx_site_notifications_site_status_updated"
+    t.index ["network_site_id"], name: "index_site_notifications_on_network_site_id"
+    t.index ["rule_id"], name: "index_site_notifications_on_rule_id"
+    t.index ["trigger_type"], name: "index_site_notifications_on_trigger_type"
+  end
+
   create_table "users", force: :cascade do |t|
     t.string "email", null: false
     t.datetime "created_at", null: false
@@ -319,4 +348,6 @@ ActiveRecord::Schema[7.2].define(version: 2026_11_13_211500) do
   add_foreign_key "monitored_devices", "network_sites"
   add_foreign_key "notification_deliveries", "monitored_devices"
   add_foreign_key "notification_deliveries", "network_sites"
+  add_foreign_key "site_notifications", "monitored_devices"
+  add_foreign_key "site_notifications", "network_sites"
 end

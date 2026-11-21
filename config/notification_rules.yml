@@ -1,0 +1,112 @@
+# Declarative Notification Engine Rules
+# Each rule defines its trigger_type, target surfaces, priority, cooldown/ttl, and copy templates.
+# Supported surfaces: push, bulletin, reminder
+# Supported priorities: critical, high, normal, low
+
+rules:
+  - id: gold_critical_cve
+    name: "Critical CVE Advisory"
+    trigger_type: gold_advisory
+    enabled: true
+    surfaces:
+      - push
+      - bulletin
+    priority: critical
+    cooldown_hours: 24
+    ttl_hours: 168
+    title_template: "Critical security update for {{device_label}}"
+    body_template: "{{advisory_summary}} Patch to {{target_version}} as soon as possible."
+    cta_label: "Review Advisory"
+    deep_link_template: "tuesday://bulletins/{{dedup_key}}"
+    sample_context:
+      device_label: "UniFi Dream Machine Pro"
+      advisory_summary: "CVE-2026-4102 allows unauthenticated LAN privilege escalation."
+      target_version: "4.1.13"
+
+  - id: gold_firmware_update
+    name: "Routine Firmware Release"
+    trigger_type: gold_advisory
+    enabled: true
+    surfaces:
+      - bulletin
+    priority: normal
+    cooldown_hours: 72
+    ttl_hours: 336
+    title_template: "Firmware {{target_version}} available for {{device_label}}"
+    body_template: "Includes stability improvements and minor security hardening."
+    cta_label: "View Release Notes"
+    deep_link_template: "tuesday://bulletins/{{dedup_key}}"
+    sample_context:
+      device_label: "Synology DS923+"
+      target_version: "DSM 7.2.2-72806"
+
+  - id: maintenance_backup_check
+    name: "Monthly Backup Verification"
+    trigger_type: maintenance_schedule
+    enabled: true
+    surfaces:
+      - push
+      - reminder
+    priority: normal
+    cooldown_hours: 720
+    ttl_hours: 336
+    title_template: "Verify config backup for {{site_name}}"
+    body_template: "It has been {{days_since_backup}} days since your last verified router and NAS backup."
+    cta_label: "Mark Verified"
+    deep_link_template: "tuesday://reminders/{{dedup_key}}"
+    sample_context:
+      site_name: "Skyway Lab"
+      days_since_backup: "32"
+
+  - id: device_unclassified_review
+    name: "Unclassified Device Review"
+    trigger_type: device_lifecycle
+    enabled: true
+    surfaces:
+      - reminder
+    priority: high
+    cooldown_hours: 48
+    ttl_hours: 168
+    title_template: "Confirm identity of {{device_label}}"
+    body_template: "Discovered on {{room_location}} with low confidence. Confirm model to enable CVE matching."
+    cta_label: "Identify Device"
+    deep_link_template: "tuesday://devices/{{device_id}}"
+    sample_context:
+      device_label: "Unknown Espressif IoT"
+      room_location: "Garage / IoT VLAN"
+      device_id: "dev-unclassified-01"
+
+  - id: onboarding_first_device
+    name: "Onboarding: Add First Device"
+    trigger_type: onboarding_nudge
+    enabled: true
+    surfaces:
+      - bulletin
+      - reminder
+    priority: normal
+    cooldown_hours: 168
+    ttl_hours: 720
+    title_template: "Add your first network device to {{site_name}}"
+    body_template: "Scan your router or NAS to unlock automatic firmware and CVE monitoring."
+    cta_label: "Start Discovery"
+    deep_link_template: "tuesday://discovery"
+    sample_context:
+      site_name: "Skyway Lab"
+
+  - id: admin_broadcast
+    name: "Admin Broadcast"
+    trigger_type: admin_broadcast
+    enabled: true
+    surfaces:
+      - push
+      - bulletin
+    priority: high
+    cooldown_hours: 1
+    ttl_hours: 168
+    title_template: "{{title}}"
+    body_template: "{{body}}"
+    cta_label: "Learn More"
+    deep_link_template: "tuesday://bulletins/{{dedup_key}}"
+    sample_context:
+      title: "Scheduled Maintenance Window"
+      body: "Tuesday Cloud advisory sync will pause for 10 minutes tonight at 02:00 PT."
