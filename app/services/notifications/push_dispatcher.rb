@@ -103,8 +103,10 @@ module Notifications
 
       def send_fcm(device_token, notif)
         project_id = ENV["FCM_PROJECT_ID"].presence
-        access_token = ENV["FCM_ACCESS_TOKEN"].presence
-        return :unconfigured if project_id.blank? || access_token.blank?
+        return :unconfigured if project_id.blank?
+
+        access_token = ENV["FCM_ACCESS_TOKEN"].presence || fetch_gcp_metadata_token
+        return :unconfigured if access_token.blank?
 
         uri = URI("#{FCM_BASE_URL}/#{project_id}/messages:send")
         payload = {
@@ -170,6 +172,20 @@ module Notifications
       rescue StandardError => e
         Rails.logger.warn("[Notifications::PushDispatcher] APNs error: #{e.message}")
         :failed
+      end
+
+      def fetch_gcp_metadata_token
+        return nil unless ENV["K_SERVICE"].present? || ENV["CLOUD_RUN_JOB"].present?
+
+        uri = URI("http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token")
+        req = Net::HTTP::Get.new(uri)
+        req["Metadata-Flavor"] = "Google"
+        resp = Net::HTTP.start(uri.host, uri.port, open_timeout: 2, read_timeout: 3) { |h| h.request(req) }
+        return nil unless resp.is_a?(Net::HTTPSuccess)
+
+        JSON.parse(resp.body)["access_token"]
+      rescue StandardError
+        nil
       end
 
       def base64url(bytes)
