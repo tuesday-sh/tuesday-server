@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_11_21_204500) do
+ActiveRecord::Schema[7.2].define(version: 2026_11_21_215600) do
   create_table "api_keys", force: :cascade do |t|
     t.integer "bearer_id", null: false
     t.string "bearer_type", null: false
@@ -275,6 +275,24 @@ ActiveRecord::Schema[7.2].define(version: 2026_11_21_204500) do
     t.index ["monitored_device_id"], name: "index_notification_deliveries_on_monitored_device_id"
     t.index ["network_site_id", "client_device_id", "bulletin_external_id"], name: "idx_notif_deliveries_unique_site_client_bulletin", unique: true
     t.index ["network_site_id"], name: "index_notification_deliveries_on_network_site_id"
+  end
+
+  create_table "notification_job_runs", force: :cascade do |t|
+    t.string "job_key", null: false
+    t.string "trigger_source", default: "rake", null: false
+    t.string "status", default: "running", null: false
+    t.datetime "started_at", null: false
+    t.datetime "finished_at"
+    t.integer "evaluated_sites", default: 0, null: false
+    t.integer "created_count", default: 0, null: false
+    t.integer "deduped_count", default: 0, null: false
+    t.integer "woken_snoozed", default: 0, null: false
+    t.integer "expired_count", default: 0, null: false
+    t.text "error_message"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["job_key", "started_at"], name: "idx_notif_job_runs_key_started"
+    t.index ["status"], name: "index_notification_job_runs_on_status"
   end
 
   create_table "product_telemetry_events", force: :cascade do |t|

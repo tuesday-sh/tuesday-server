@@ -83,6 +83,26 @@ module Api
         assert_response :success
         assert_equal "dismissed", JSON.parse(response.body).dig("notification", "status")
       end
+
+      test "sweep_runner records audit run and wakes elapsed snoozed notifications" do
+        post "/api/v1/notifications/test_rule",
+             params: { rule_id: "maintenance_backup_check", force: true },
+             headers: @headers,
+             as: :json
+        assert_response :success
+        notif_id = JSON.parse(response.body).dig("notification", "id")
+
+        SiteNotification.where(id: notif_id).update_all(status: "snoozed", snoozed_until: 5.minutes.ago)
+
+        result = Notifications::SweepRunner.run!(trigger_source: "test_suite")
+        assert_equal 1, result[:wokenSnoozed]
+        assert_equal "active", SiteNotification.find(notif_id).status
+
+        run = NotificationJobRun.find(result[:jobRunId])
+        assert_equal "succeeded", run.status
+        assert_equal "test_suite", run.trigger_source
+        assert_equal 1, run.woken_snoozed
+      end
     end
   end
 end
