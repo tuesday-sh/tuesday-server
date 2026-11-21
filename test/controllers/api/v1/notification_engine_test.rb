@@ -103,6 +103,21 @@ module Api
         assert_equal "test_suite", run.trigger_source
         assert_equal 1, run.woken_snoozed
       end
+
+      test "exposes server version from /api/v1/version and /api/up" do
+        get "/api/v1/version"
+        assert_response :success
+        v = JSON.parse(response.body)
+        assert_equal "ok", v["status"]
+        assert v["version"].present?
+        assert_equal "test", v["railsEnv"]
+
+        get "/api/up"
+        assert_response :success
+        up = JSON.parse(response.body)
+        assert_equal true, up["is_up"]
+        assert_equal v["version"], up["version"]
+      end
     end
   end
 end

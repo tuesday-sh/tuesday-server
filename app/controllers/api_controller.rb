@@ -2,7 +2,7 @@ class ApiController < ApplicationController
   protect_from_forgery with: :null_session
 
   def up
-    render json: "{is_up: true}"
+    render json: Api::V1::VersionController.version_payload.merge(is_up: true)
   end
 
   def message
