@@ -149,6 +149,24 @@ module Api
         )
         assert_equal 3, jwt.split(".").size
       end
+
+      test "discord notifier formats activation payload and ignores synthetic device IDs" do
+        assert Telemetry::DiscordNotifier.ignored_device?("test-workbench-01")
+        assert Telemetry::DiscordNotifier.ignored_device?("anonymous")
+        refute Telemetry::DiscordNotifier.ignored_device?("pixel9-real-user-uuid")
+
+        ev = ProductTelemetryEvent.new(
+          event_name: "app.activated",
+          event_domain: "client",
+          client_platform: "android",
+          app_flavor: "tuesday",
+          device_id: "pixel9-real-user-uuid"
+        )
+        payload = Telemetry::DiscordNotifier.build_activation_payload(ev)
+        assert_equal "Tuesday Activation Bot", payload[:username]
+        assert_equal "New User Activation", payload[:embeds].first[:title]
+        assert_equal :unconfigured, Telemetry::DiscordNotifier.notify_first_activation!(ev)
+      end
     end
   end
 end

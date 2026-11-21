@@ -57,6 +57,9 @@ module Api
             properties: props
           )
           Telemetry::HostedAiLogger.log_product_event(ev.to_telemetry_hash)
+          if ProductTelemetryEvent.where(device_id: ev.device_id).limit(2).count == 1
+            Telemetry::DiscordNotifier.notify_first_activation!(ev)
+          end
           created_events << ev.to_telemetry_hash
         end
 
