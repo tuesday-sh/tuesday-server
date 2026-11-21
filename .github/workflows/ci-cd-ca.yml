@@ -101,7 +101,7 @@ jobs:
   deploy-cloud-run:
     name: "Deploy Verified Chainguard Image to GCP Cloud Run (us-west1)"
     needs: verify-and-attest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && vars.ENABLE_CLOUD_RUN_DEPLOY == 'true'
+    if: (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))) && vars.ENABLE_CLOUD_RUN_DEPLOY == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -119,13 +119,15 @@ jobs:
       - name: Build & Push Chainguard Image to Artifact Registry (us-west1)
         run: |
           gcloud auth configure-docker us-west1-docker.pkg.dev --quiet
-          IMAGE_URI="us-west1-docker.pkg.dev/tuesday-sh/tuesday-containers/tuesday-server:${GITHUB_SHA::7}"
-          docker build -f Dockerfile.cloud -t "$IMAGE_URI" .
+          IMAGE_BASE="us-west1-docker.pkg.dev/tuesday-sh/cloud-run-source-deploy/tuesday-server"
+          IMAGE_URI="${IMAGE_BASE}:${GITHUB_SHA::7}"
+          docker build -f Dockerfile.cloud -t "$IMAGE_URI" -t "${IMAGE_BASE}:latest" .
           docker push "$IMAGE_URI"
+          docker push "${IMAGE_BASE}:latest"
 
-      - name: Deploy to Cloud Run Gen2 (us-west1)
+      - name: Deploy to Cloud Run Gen2 & Update Notification Sweep Job (us-west1)
         run: |
-          IMAGE_URI="us-west1-docker.pkg.dev/tuesday-sh/tuesday-containers/tuesday-server:${GITHUB_SHA::7}"
+          IMAGE_URI="us-west1-docker.pkg.dev/tuesday-sh/cloud-run-source-deploy/tuesday-server:${GITHUB_SHA::7}"
           gcloud run deploy tuesday-server \
             --image="$IMAGE_URI" \
             --region=us-west1 \
@@ -133,4 +135,8 @@ jobs:
             --execution-environment=gen2 \
             --allow-unauthenticated \
             --port=8080 \
+            --update-env-vars="GIT_SHA=${GITHUB_SHA::7}" \
             --startup-probe=httpGet.path=/up,httpGet.port=8080,initialDelaySeconds=2,periodSeconds=5,failureThreshold=12
+          gcloud run jobs update tuesday-notifications-sweep \
+            --image="$IMAGE_URI" \
+            --region=us-west1 || true
