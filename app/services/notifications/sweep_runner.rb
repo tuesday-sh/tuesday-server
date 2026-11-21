@@ -30,6 +30,8 @@ module Notifications
           end
         end
 
+        push_summary = Notifications::PushDispatcher.dispatch_pending!
+
         finish_job_run!(
           job_run,
           evaluated_sites: evaluated_sites,
@@ -47,7 +49,10 @@ module Notifications
           wokenSnoozed: woken,
           expiredCount: expired,
           createdCount: created_count,
-          dedupedCount: deduped_count
+          dedupedCount: deduped_count,
+          pushSent: push_summary[:sentCount],
+          pushFailed: push_summary[:failedCount],
+          pushSkipped: push_summary[:skippedCount]
         }
       rescue StandardError => e
         fail_job_run!(job_run, e)

@@ -118,6 +118,37 @@ module Api
         assert_equal true, up["is_up"]
         assert_equal v["version"], up["version"]
       end
+
+      test "push_dispatcher skips cleanly when credentials are unconfigured and generates valid APNs ES256 JWT" do
+        post "/api/v1/notifications/test_rule",
+             params: { rule_id: "gold_critical_cve", force: true },
+             headers: @headers,
+             as: :json
+        assert_response :success
+        notif = SiteNotification.find(JSON.parse(response.body).dig("notification", "id"))
+
+        DevicePushToken.create!(
+          network_site_id: notif.network_site_id,
+          client_device_id: "test-ios-01",
+          platform: "ios",
+          app_flavor: "tuesday",
+          fcm_token: "apns-device-token-abc123",
+          critical_enabled: true,
+          digest_enabled: true
+        )
+
+        res = Notifications::PushDispatcher.dispatch_notification!(notif)
+        assert_equal "skipped_unconfigured", res[:outcome]
+        assert_equal "pending", notif.reload.push_status
+
+        ec_key = OpenSSL::PKey::EC.generate("prime256v1")
+        jwt = Notifications::PushDispatcher.build_apns_jwt(
+          key_id: "KEY1234567",
+          team_id: "TEAM123456",
+          private_key_pem: ec_key.to_pem
+        )
+        assert_equal 3, jwt.split(".").size
+      end
     end
   end
 end

@@ -12,4 +12,10 @@ namespace :notifications do
     count = Notifications::SweepRunner.wake_snoozed!
     puts "[notifications:wake_snoozed] woken=#{count}"
   end
+
+  desc "Dispatch pending SiteNotification push records via FCM and APNs"
+  task dispatch_push: :environment do
+    result = Notifications::PushDispatcher.dispatch_pending!
+    puts "[notifications:dispatch_push] #{result.to_json}"
+  end
 end
