@@ -17,20 +17,29 @@ module Notifications
 
     class << self
       def dispatch_pending!(limit: 100)
-        pending = SiteNotification.where(push_status: "pending", status: %w[active seen])
+        pending = SiteNotification.includes(:network_site)
+                                  .where(push_status: "pending", status: %w[active seen])
                                   .order(created_at: :asc)
                                   .limit(limit)
+                                  .to_a
 
         sent_count = 0
         failed_count = 0
         skipped_count = 0
 
-        pending.find_each do |notif|
-          result = dispatch_notification!(notif)
+        # Collapse identical advisories/rules across multiple sites belonging to the same owner
+        grouped = pending.group_by do |n|
+          owner = n.network_site&.owner_key || "site-#{n.network_site_id}"
+          ext_id = n.payload["external_id"].presence || n.rule_id
+          "#{owner}:#{n.rule_id}:#{ext_id}"
+        end
+
+        grouped.each_value do |group_notifs|
+          result = dispatch_group!(group_notifs)
           case result[:outcome]
-          when "sent" then sent_count += 1
-          when "failed" then failed_count += 1
-          else skipped_count += 1
+          when "sent" then sent_count += group_notifs.size
+          when "failed" then failed_count += group_notifs.size
+          else skipped_count += group_notifs.size
           end
         end
 
@@ -39,6 +48,36 @@ module Notifications
           failedCount: failed_count,
           skippedCount: skipped_count
         }
+      end
+
+      def dispatch_group!(notifs)
+        primary = notifs.first
+        return { outcome: "skipped_no_tokens" } if primary.nil?
+        return dispatch_notification!(primary) if notifs.size == 1
+
+        # Deduplicate device tokens across all affected sites so each physical phone gets 1 OS push
+        tokens = notifs.flat_map { |n| eligible_tokens_for(n) }.uniq(&:fcm_token)
+        return { outcome: "skipped_no_tokens" } if tokens.empty?
+
+        site_names = notifs.filter_map { |n| n.network_site&.name }.uniq
+        collapsed_body = "#{primary.body} (Affects #{site_names.size} networks: #{site_names.join(', ')})"
+        collapsed_notif = SiteNotification.new(primary.attributes.merge("body" => collapsed_body))
+
+        attempted = 0
+        succeeded = 0
+        tokens.each do |device_token|
+          res = device_token.platform == "ios" ? send_apns(device_token, collapsed_notif) : send_fcm(device_token, collapsed_notif)
+          next if res == :unconfigured
+
+          attempted += 1
+          succeeded += 1 if res == :sent
+        end
+
+        return { outcome: "skipped_unconfigured" } if attempted.zero?
+
+        new_status = succeeded.positive? ? "sent" : "failed"
+        SiteNotification.where(id: notifs.map(&:id)).update_all(push_status: new_status, updated_at: Time.current)
+        { outcome: new_status, deliveredTargets: succeeded, collapsedCount: notifs.size }
       end
 
       def dispatch_notification!(notif)

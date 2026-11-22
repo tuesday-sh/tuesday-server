@@ -223,6 +223,35 @@ module Api
           assert_equal "none", n["pushStatus"], "Enrollment-time advisories should suppress immediate OS push"
         end
       end
+
+      test "feed stays single-network scoped while returning otherSitesSummary and alsoAffectedSites" do
+        dev_id = "multi-net-dev"
+        owner = "device-#{dev_id}"
+        home = NetworkSite.create!(owner_key: owner, name: "Skyway Lab", slug: "skyway-lab", is_default: true)
+        parents = NetworkSite.create!(owner_key: owner, name: "Parents House", slug: "parents-house", is_default: false)
+
+        Notifications::Engine.emit_for_rule!(
+          site: home,
+          rule_id: "gold_critical_cve",
+          dedup_key: "adv:#{home.id}:cve-1",
+          context: { "external_id" => "cve-1" }
+        )
+        Notifications::Engine.emit_for_rule!(
+          site: parents,
+          rule_id: "gold_critical_cve",
+          dedup_key: "adv:#{parents.id}:cve-1",
+          context: { "external_id" => "cve-1" }
+        )
+
+        get "/api/v1/notifications/feed", headers: { "X-Tuesday-Device-ID" => dev_id, "X-Tuesday-Site-Slug" => "skyway-lab" }
+        assert_response :success
+        body = JSON.parse(response.body)
+        assert_equal 1, body["count"]
+        assert_equal 1, body["otherSitesSummary"].size
+        assert_equal "Parents House", body["otherSitesSummary"].first["name"]
+        assert_equal 1, body["otherSitesSummary"].first["criticalCount"]
+        assert_equal "Parents House", body["notifications"].first["alsoAffectedSites"].first["name"]
+      end
     end
   end
 end

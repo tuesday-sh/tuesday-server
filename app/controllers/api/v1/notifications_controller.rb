@@ -221,12 +221,51 @@ module Api
         records = scope.to_a
         records = records.select { |r| r.targets_surface?(surface_filter) } if surface_filter.present?
 
+        other_sites = NetworkSite.where(owner_key: current_owner_key).where.not(id: site.id).to_a
+        other_site_ids = other_sites.map(&:id)
+        other_sites_by_id = other_sites.index_by(&:id)
+
+        other_unresolved = if other_site_ids.any?
+                             SiteNotification.unresolved.where(network_site_id: other_site_ids).to_a
+                           else
+                             []
+                           end
+
+        other_sites_summary = other_sites.map do |os|
+          os_notifs = other_unresolved.select { |n| n.network_site_id == os.id }
+          {
+            networkSiteId: os.id,
+            name: os.name,
+            unresolvedCount: os_notifs.size,
+            criticalCount: os_notifs.count { |n| %w[critical high].include?(n.priority) }
+          }
+        end
+
+        serialized = records.map do |rec|
+          hash = rec.to_api_hash
+          ext_id = rec.payload["external_id"].presence
+          also_sites = if other_unresolved.any?
+                         other_unresolved.select do |other|
+                           other.rule_id == rec.rule_id &&
+                             (ext_id.blank? || other.payload["external_id"] == ext_id)
+                         end.map(&:network_site_id).uniq.filter_map do |sid|
+                           os = other_sites_by_id[sid]
+                           os ? { networkSiteId: os.id, name: os.name } : nil
+                         end
+                       else
+                         []
+                       end
+          hash.merge(alsoAffectedSites: also_sites)
+        end
+
         render json: {
           status: "ok",
           networkSiteId: site.id,
+          networkSiteName: site.name,
           syncedAt: Time.current.utc.iso8601,
-          count: records.size,
-          notifications: records.map(&:to_api_hash)
+          count: serialized.size,
+          otherSitesSummary: other_sites_summary,
+          notifications: serialized
         }
       end
 
