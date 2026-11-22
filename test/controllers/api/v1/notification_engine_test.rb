@@ -279,6 +279,48 @@ module Api
         assert_equal "none", unlocked.push_status
         assert_includes unlocked.title, "UDM-Pro"
       end
+
+      test "decommissioning a device silences its open advisories and emits r1_decommission_checklist" do
+        post "/api/v1/inventory",
+             params: {
+               id: "dev-retire-r7000",
+               vendor: "Netgear",
+               model_number: "R7000",
+               name: "Basement Netgear R7000",
+               short_label: "R7000 AP",
+               category_code: "C3",
+               version: "1.0.11.136"
+             },
+             headers: @headers,
+             as: :json
+        assert_response :created
+        dev = MonitoredDevice.find_by!(external_uuid: "dev-retire-r7000")
+        site = dev.network_site
+
+        open_adv = SiteNotification.create!(
+          network_site: site,
+          monitored_device: dev,
+          rule_id: "gold_critical_cve",
+          trigger_type: "gold_advisory",
+          dedup_key: "adv:retire-test",
+          surfaces_json: '["bulletin"]',
+          priority: "critical",
+          status: "active",
+          push_status: "none",
+          title: "Open CVE on R7000",
+          body: "Needs patch"
+        )
+
+        delete "/api/v1/inventory/dev-retire-r7000", headers: @headers
+        assert_response :success
+        assert_equal "dismissed", open_adv.reload.status
+
+        checklist = SiteNotification.find_by(network_site_id: site.id, rule_id: "r1_decommission_checklist")
+        assert_not_nil checklist
+        assert_equal %w[reminder], checklist.surfaces
+        assert_equal "none", checklist.push_status
+        assert_includes checklist.title, "R7000 AP"
+      end
     end
   end
 end

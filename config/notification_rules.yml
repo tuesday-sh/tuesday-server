@@ -163,6 +163,75 @@ rules:
       device_label: "UniFi Dream Machine Pro"
       device_id: "dev-relinked-01"
 
+  - id: r1_install_hardening
+    name: "R1: Day-1 Install Hardening Checklist"
+    trigger_type: device_lifecycle
+    enabled: true
+    surfaces:
+      - reminder
+    priority: normal
+    cooldown_hours: 720
+    ttl_hours: 336
+    title_template: "Day-1 hardening checklist for {{device_label}}"
+    body_template: "Change default admin credentials, confirm initial firmware version, and disable unused UPnP or remote WAN admin."
+    cta_label: "Open Checklist"
+    deep_link_template: "tuesday://devices/{{device_id}}"
+    sample_context:
+      device_label: "UniFi Dream Machine Pro"
+      device_id: "dev-install-01"
+
+  - id: r1_post_install_backup
+    name: "R1: Post-Install Config Backup (Day 14)"
+    trigger_type: device_lifecycle
+    enabled: true
+    surfaces:
+      - reminder
+    priority: low
+    cooldown_hours: 720
+    ttl_hours: 336
+    title_template: "Save baseline config backup for {{device_label}}"
+    body_template: "Now that {{device_label}} has settled in, export a clean configuration backup for quick recovery."
+    cta_label: "Mark Backed Up"
+    deep_link_template: "tuesday://devices/{{device_id}}"
+    sample_context:
+      device_label: "UniFi Dream Machine Pro"
+      device_id: "dev-install-01"
+
+  - id: r1_eol_approaching
+    name: "R1: Approaching Hardware End-of-Life"
+    trigger_type: device_lifecycle
+    enabled: true
+    surfaces:
+      - bulletin
+    priority: high
+    cooldown_hours: 720
+    ttl_hours: 720
+    title_template: "{{device_label}} is approaching End-of-Life"
+    body_template: "Vendor security updates end soon ({{eol_date}}). Plan a replacement before patches stop."
+    cta_label: "Plan Replacement"
+    deep_link_template: "tuesday://devices/{{device_id}}"
+    sample_context:
+      device_label: "Netgear R7000"
+      eol_date: "2026-12-31"
+      device_id: "dev-eol-01"
+
+  - id: r1_decommission_checklist
+    name: "R1: Safe Decommission Checklist"
+    trigger_type: device_lifecycle
+    enabled: true
+    surfaces:
+      - reminder
+    priority: normal
+    cooldown_hours: 24
+    ttl_hours: 336
+    title_template: "Safe decommission checklist for {{device_label}}"
+    body_template: "Factory-reset and wipe Wi-Fi/admin credentials, remove stale port forwards or DHCP leases, and archive. Future advisories for this unit are now silenced."
+    cta_label: "Mark Decommissioned"
+    deep_link_template: "tuesday://bulletins"
+    sample_context:
+      device_label: "Netgear R7000"
+      device_id: "dev-retire-01"
+
   - id: admin_broadcast
     name: "Admin Broadcast"
     trigger_type: admin_broadcast

@@ -239,7 +239,28 @@ module Api
                  site.monitored_devices.find_by(id: params[:id])
         return render json: { error: "Device not found" }, status: :not_found if device.nil?
 
+        device_label = device.short_label.presence || device.name
+        device_uuid = device.external_uuid
+        now = Time.current
+        SiteNotification.where(network_site_id: site.id, monitored_device_id: device.id)
+                        .update_all(status: "dismissed", resolved_at: now, monitored_device_id: nil, updated_at: now)
+
         device.destroy!
+
+        begin
+          Notifications::Engine.emit_for_rule!(
+            site: site,
+            rule_id: "r1_decommission_checklist",
+            dedup_key: "r1_decommission:#{site.id}:#{device_uuid}",
+            context: {
+              "device_label" => device_label,
+              "device_id" => device_uuid
+            }
+          )
+        rescue StandardError => e
+          Rails.logger.warn("[Api::V1::InventoryController] Decommission checklist skipped: #{e.message}")
+        end
+
         render json: { status: "deleted", id: params[:id], site: serialize_site(site.reload) }
       end
 
