@@ -108,10 +108,17 @@ module Api
               purls: device.purls_list
             }
           )
+          advisories_sync = begin
+            Notifications::GoldAdvisoryBridge.sync_for_site!(site.reload, suppress_push: true)
+          rescue StandardError => e
+            Rails.logger.warn("[Api::V1::InventoryController] GoldAdvisoryBridge skipped: #{e.message}")
+            { createdCount: 0, dedupedCount: 0 }
+          end
           render json: {
             status: "created",
             device: device.to_gold_hash,
-            site: serialize_site(site.reload)
+            site: serialize_site(site),
+            advisoriesSync: advisories_sync
           }, status: :created
         else
           render json: { errors: device.errors.full_messages }, status: :unprocessable_entity

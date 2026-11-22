@@ -28,7 +28,7 @@ module Notifications
         }
       end
 
-      def sync_for_site!(site)
+      def sync_for_site!(site, suppress_push: false)
         return { createdCount: 0, dedupedCount: 0 } if site.nil? || site.monitored_devices.none?
 
         tracked = site.monitored_devices.map(&:to_gold_hash)
@@ -47,7 +47,7 @@ module Notifications
 
           is_high = !!item[:is_high_sev]
           rule_id = is_high ? "gold_critical_cve" : "gold_firmware_update"
-          surfaces = is_high ? %w[push bulletin] : %w[bulletin]
+          surfaces = (is_high && !suppress_push) ? %w[push bulletin] : %w[bulletin]
 
           res = Notifications::Engine.emit_for_rule!(
             site: site,

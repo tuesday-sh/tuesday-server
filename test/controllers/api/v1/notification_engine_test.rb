@@ -198,6 +198,31 @@ module Api
         assert_response :success
         assert_equal "rhythm", JSON.parse(response.body).dig("notification", "kind")
       end
+
+      test "enrolling a device immediately populates in-app advisories with push suppressed" do
+        post "/api/v1/inventory",
+             params: {
+               vendor: "Ubiquiti",
+               model_number: "UDM-Pro",
+               name: "UniFi Dream Machine Pro",
+               short_label: "UDM-Pro",
+               category_code: "C1",
+               version: "3.2.12",
+               purls: ["pkg:generic/ui/unifi-os@3.2.12"]
+             },
+             headers: @headers,
+             as: :json
+        assert_response :created
+        body = JSON.parse(response.body)
+        assert body.key?("advisoriesSync")
+
+        get "/api/v1/notifications/feed", headers: @headers
+        assert_response :success
+        notifs = JSON.parse(response.body)["notifications"]
+        notifs.each do |n|
+          assert_equal "none", n["pushStatus"], "Enrollment-time advisories should suppress immediate OS push"
+        end
+      end
     end
   end
 end
