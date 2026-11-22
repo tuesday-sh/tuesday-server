@@ -93,6 +93,23 @@ rules:
     sample_context:
       site_name: "Skyway Lab"
 
+  - id: onboarding_join_dispatch
+    name: "Onboarding: Join Dispatch Community (Day 7 / Post-Advisory)"
+    trigger_type: onboarding_nudge
+    enabled: true
+    surfaces:
+      - bulletin
+    priority: low
+    cooldown_hours: 720
+    ttl_hours: 336
+    max_lifetime_sends: 2
+    title_template: "Join the Tuesday Dispatch community"
+    body_template: "Get our monthly Patch Tuesday digest, homelab security playbooks, and early feed drops. Quiet, zero-spam."
+    cta_label: "Join Dispatch"
+    deep_link_template: "tuesday://account/dispatch"
+    sample_context:
+      site_name: "Skyway Lab"
+
   - id: admin_broadcast
     name: "Admin Broadcast"
     trigger_type: admin_broadcast
