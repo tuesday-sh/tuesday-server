@@ -167,6 +167,21 @@ module Api
         assert_equal "New User Activation", payload[:embeds].first[:title]
         assert_equal :unconfigured, Telemetry::DiscordNotifier.notify_first_activation!(ev)
       end
+
+      test "enforces max_lifetime_sends and detects 2nd Tuesday Patch Tuesday window" do
+        site = NetworkSite.create!(owner_key: "cap-test-owner", name: "Cap Lab", slug: "cap-lab")
+        first = Notifications::Engine.emit_for_rule!(site: site, rule_id: "onboarding_core_gear", dedup_key: "core:1")
+        assert_equal "created", first[:action]
+
+        second = Notifications::Engine.emit_for_rule!(site: site, rule_id: "onboarding_core_gear", dedup_key: "core:2")
+        assert_equal "capped", second[:action]
+
+        # Nov 10, 2026 is the 2nd Tuesday of November
+        pt_second_tue = Time.find_zone("America/Los_Angeles").local(2026, 11, 10, 10, 15, 0)
+        pt_first_tue = Time.find_zone("America/Los_Angeles").local(2026, 11, 3, 10, 15, 0)
+        assert Notifications::Engine.patch_tuesday_window?(pt_second_tue)
+        refute Notifications::Engine.patch_tuesday_window?(pt_first_tue)
+      end
     end
   end
 end

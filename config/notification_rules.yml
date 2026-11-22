@@ -110,6 +110,42 @@ rules:
     sample_context:
       site_name: "Skyway Lab"
 
+  - id: onboarding_core_gear
+    name: "Onboarding: Add Core Gateway or NAS (Day 3)"
+    trigger_type: onboarding_nudge
+    enabled: true
+    surfaces:
+      - bulletin
+    priority: low
+    cooldown_hours: 720
+    ttl_hours: 336
+    max_lifetime_sends: 1
+    title_template: "Add your router or NAS to {{site_name}}"
+    body_template: "Gateways and NAS boxes carry the highest-impact manufacturer security notices. Add yours to filter global CVE feeds directly to your gear."
+    cta_label: "Add Core Gear"
+    deep_link_template: "tuesday://discovery"
+    sample_context:
+      site_name: "Skyway Lab"
+
+  - id: rhythm_patch_tuesday
+    name: "Monthly Patch Tuesday Rhythm & All-Clear Digest"
+    trigger_type: maintenance_schedule
+    enabled: true
+    surfaces:
+      - push
+      - bulletin
+    priority: normal
+    cooldown_hours: 600
+    ttl_hours: 336
+    title_template: "{{month_label}} Patch Tuesday Check-Up"
+    body_template: "Your monthly global advisory sweep for {{site_name}} ({{device_count}} devices) is ready. Review any new updates or confirm all clear."
+    cta_label: "Open Check-Up"
+    deep_link_template: "tuesday://bulletins/{{dedup_key}}"
+    sample_context:
+      month_label: "November"
+      site_name: "Skyway Lab"
+      device_count: "7"
+
   - id: admin_broadcast
     name: "Admin Broadcast"
     trigger_type: admin_broadcast
