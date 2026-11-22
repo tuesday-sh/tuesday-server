@@ -28,10 +28,13 @@ module Notifications
         }
       end
 
-      def sync_for_site!(site, suppress_push: false)
-        return { createdCount: 0, dedupedCount: 0 } if site.nil? || site.monitored_devices.none?
+      def sync_for_site!(site, devices: nil, suppress_push: false)
+        return { createdCount: 0, dedupedCount: 0 } if site.nil?
 
-        tracked = site.monitored_devices.map(&:to_gold_hash)
+        target_devices = devices.nil? ? site.monitored_devices.to_a : Array(devices)
+        return { createdCount: 0, dedupedCount: 0 } if target_devices.empty?
+
+        tracked = target_devices.map(&:to_gold_hash)
         assembled = Bulletins::GoldSnapshotLoader.assemble_bulletins_from_gold(
           app_flavor: "tuesday",
           muted_feed_slugs: site.muted_feed_slugs_list,

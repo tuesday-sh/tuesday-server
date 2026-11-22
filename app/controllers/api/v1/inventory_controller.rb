@@ -109,7 +109,7 @@ module Api
             }
           )
           advisories_sync = begin
-            Notifications::GoldAdvisoryBridge.sync_for_site!(site.reload, suppress_push: true)
+            Notifications::GoldAdvisoryBridge.sync_for_site!(site.reload, devices: [device], suppress_push: true)
           rescue StandardError => e
             Rails.logger.warn("[Api::V1::InventoryController] GoldAdvisoryBridge skipped: #{e.message}")
             { createdCount: 0, dedupedCount: 0 }
