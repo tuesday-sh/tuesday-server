@@ -426,30 +426,64 @@ module Discovery
             end
           end
 
-          # Step 2: Upstream Vision LLM Router (Elastix Primary -> Gemini Failover)
+          # Step 2: Single-Hop Vision LLM Router (Primary -> Hard-Error-Only Failover)
+          # Never chain a second LLM on low confidence; return `nextNarrowingQuestion` to the user immediately.
           unless result
-            if provider_override.to_s.downcase == "heuristic"
+            primary_provider = if provider_override.to_s.downcase.in?(%w[heuristic gemini elastix])
+                                 provider_override.to_s.downcase
+                               else
+                                 ENV.fetch("PRIMARY_VISION_PROVIDER", "gemini").to_s.downcase
+                               end
+
+            if primary_provider == "heuristic"
               trace.call("ROUTER", "Using deterministic Heuristic mode (provider_override=heuristic)")
               result = heuristic_infer(turn_index: turn_index, previous_guess: previous_guess, clues: normalized_clues)
               provider_used = "Heuristic"
               model_used = "heuristic-fallback"
-            elsif provider_override.to_s.downcase == "gemini"
-              trace.call("ROUTER", "Dispatching directly to GCP Gemini Interactions API (#{ENV.fetch('GEMINI_MODEL', 'gemini-3.8-flash')})")
-              res_data = call_gemini_interactions(
-                turn_index: turn_index,
-                previous_guess: previous_guess,
-                clues: normalized_clues,
-                ephemeral_frames: ephemeral_frames
-              )
-              result = res_data[:result]
-              raw_llm_response = res_data[:raw_text]
-              usage = res_data[:usage]
-              provider_used = "Google"
-              model_used = res_data[:model]
-              trace.call("LLM_OK", "Gemini #{model_used} responded (in=#{usage[:input_tokens]} out=#{usage[:output_tokens]} cached=#{usage[:cache_read_tokens]} tokens)")
+            elsif primary_provider == "gemini"
+              begin
+                trace.call("ROUTER", "Dispatching single-hop vision request to GCP Gemini (#{ENV.fetch('GEMINI_MODEL', 'gemini-3.8-flash')})")
+                res_data = call_gemini_interactions(
+                  turn_index: turn_index,
+                  previous_guess: previous_guess,
+                  clues: normalized_clues,
+                  ephemeral_frames: ephemeral_frames
+                )
+                result = res_data[:result]
+                raw_llm_response = res_data[:raw_text]
+                usage = res_data[:usage]
+                provider_used = "Google"
+                model_used = res_data[:model]
+                trace.call("LLM_OK", "Gemini #{model_used} responded (in=#{usage[:input_tokens]} out=#{usage[:output_tokens]} cached=#{usage[:cache_read_tokens]} tokens)")
+              rescue StandardError => gemini_err
+                Rails.logger.warn("[Discovery::HardwareVisionService] Gemini primary failed (#{gemini_err.message}); failing over to Elastix")
+                trace.call("LLM_WARN", "Gemini primary failed: #{gemini_err.message} -> failing over to Elastix")
+                fallback_used = true
+                begin
+                  res_data = call_elastix_chat_completions(
+                    session_id: session_id,
+                    turn_index: turn_index,
+                    previous_guess: previous_guess,
+                    clues: normalized_clues,
+                    ephemeral_frames: ephemeral_frames
+                  )
+                  result = res_data[:result]
+                  raw_llm_response = res_data[:raw_text]
+                  usage = res_data[:usage]
+                  provider_used = "Elastix"
+                  model_used = res_data[:model]
+                  trace.call("LLM_OK", "Elastix failover #{model_used} responded (in=#{usage[:input_tokens]} out=#{usage[:output_tokens]} cached=#{usage[:cache_read_tokens]} tokens)")
+                rescue StandardError => elastix_err
+                  Rails.logger.warn("[Discovery::HardwareVisionService] Elastix failover failed (#{elastix_err.message}); using deterministic heuristic")
+                  trace.call("LLM_ERROR", "Elastix failover failed: #{elastix_err.message} -> falling back to Heuristic")
+                  result = heuristic_infer(turn_index: turn_index, previous_guess: previous_guess, clues: normalized_clues)
+                  provider_used = "Heuristic"
+                  model_used = "heuristic-fallback"
+                end
+              end
             else
               begin
-                trace.call("ROUTER", "Dispatching primary vision request to Elastix.ai (#{ENV.fetch('ELASTIX_MODEL', 'qwen3.8-27b')})")
+                trace.call("ROUTER", "Dispatching single-hop vision request to Elastix.ai (#{ENV.fetch('ELASTIX_MODEL', 'qwen3.8-27b')})")
                 res_data = call_elastix_chat_completions(
                   session_id: session_id,
                   turn_index: turn_index,
@@ -462,54 +496,7 @@ module Discovery
                 usage = res_data[:usage]
                 provider_used = "Elastix"
                 model_used = res_data[:model]
-                elastix_top_conf = result["confidence"] || ((Array(result["candidates"]).first&.dig("confidencePercent") || 0).to_f / 100.0)
-                elastix_multi_device = !!result["multipleDevicesDetected"]
-                elastix_has_exact_id = %w[modelNumber serialNumber barcode].any? do |k|
-                  result.dig("extractedIdentifiersObject", k).to_s.strip.present?
-                end
-                trace.call("LLM_OK", "Elastix #{model_used} responded (conf=#{(elastix_top_conf * 100).round}% multi_device=#{elastix_multi_device} in=#{usage[:input_tokens]} out=#{usage[:output_tokens]} cached=#{usage[:cache_read_tokens]} tokens)")
-
-                # Escalate to GCP Gemini Flash when:
-                # 1) Elastix confidence < 0.65 (e.g. rotated PCB stickers, embossed text), OR
-                # 2) Multiple chassis are detected in frame without an exact label identifier (preventing peripheral familiarity bias)
-                should_escalate = (elastix_top_conf < 0.65) || (elastix_multi_device && !elastix_has_exact_id)
-                if should_escalate && ENV["GEMINI_API_KEY"].to_s.strip.present? && provider_override.to_s.downcase == "auto"
-                  esc_reason = if elastix_multi_device && !elastix_has_exact_id && elastix_top_conf >= 0.65
-                                 "multiple devices in frame without exact label identifier (conf=#{(elastix_top_conf * 100).round}%)"
-                               else
-                                 "Elastix top confidence #{(elastix_top_conf * 100).round}% < 65% threshold"
-                               end
-                  trace.call("LLM_ESCALATE", "#{esc_reason} -> escalating to GCP Gemini Flash")
-                  begin
-                    gem_data = call_gemini_interactions(
-                      turn_index: turn_index,
-                      previous_guess: result,
-                      clues: normalized_clues,
-                      ephemeral_frames: ephemeral_frames
-                    )
-                    gem_res = gem_data[:result]
-                    gem_conf = gem_res["confidence"] || ((Array(gem_res["candidates"]).first&.dig("confidencePercent") || 0).to_f / 100.0)
-                    usage = {
-                      input_tokens: usage[:input_tokens].to_i + gem_data[:usage][:input_tokens].to_i,
-                      output_tokens: usage[:output_tokens].to_i + gem_data[:usage][:output_tokens].to_i,
-                      cache_read_tokens: usage[:cache_read_tokens].to_i + gem_data[:usage][:cache_read_tokens].to_i
-                    }
-                    fallback_used = true
-                    if (elastix_multi_device && !elastix_has_exact_id) || gem_conf >= elastix_top_conf
-                      result = gem_res
-                      result["multipleDevicesDetected"] = true if elastix_multi_device
-                      result["multiDeviceWarning"] ||= MULTI_DEVICE_WARNING_MESSAGE if result["multipleDevicesDetected"]
-                      raw_llm_response = gem_data[:raw_text]
-                      provider_used = "Google"
-                      model_used = gem_data[:model]
-                      trace.call("LLM_OK", "Gemini escalation #{model_used} selected (conf=#{(gem_conf * 100).round}% multi_device=#{result['multipleDevicesDetected']})")
-                    else
-                      trace.call("LLM_OK", "Gemini escalation returned #{(gem_conf * 100).round}%; retaining Elastix result (#{(elastix_top_conf * 100).round}%)")
-                    end
-                  rescue StandardError => esc_err
-                    trace.call("LLM_WARN", "Gemini escalation skipped (#{esc_err.message}); retaining Elastix result")
-                  end
-                end
+                trace.call("LLM_OK", "Elastix #{model_used} responded (in=#{usage[:input_tokens]} out=#{usage[:output_tokens]} cached=#{usage[:cache_read_tokens]} tokens)")
               rescue StandardError => elastix_err
                 Rails.logger.warn("[Discovery::HardwareVisionService] Elastix primary failed (#{elastix_err.message}); failing over to Gemini")
                 trace.call("LLM_WARN", "Elastix primary failed: #{elastix_err.message} -> failing over to GCP Gemini")
@@ -1465,7 +1452,7 @@ module Discovery
         req["Accept"] = "application/json"
         req.body = JSON.generate(request_body)
 
-        res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true, open_timeout: 5, read_timeout: 28) do |http|
+        res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: true, open_timeout: 4, read_timeout: 12) do |http|
           http.request(req)
         end
 
@@ -1524,7 +1511,7 @@ module Discovery
           "model" => model,
           "input" => input_items,
           "generation_config" => {
-            "thinking_level" => "low",
+            "thinking_level" => ENV.fetch("GEMINI_THINKING_LEVEL", "minimal"),
             "temperature" => 0.2
           },
           "response_format" => {
