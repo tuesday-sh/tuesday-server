@@ -114,10 +114,21 @@ module Api
             Rails.logger.warn("[Api::V1::InventoryController] GoldAdvisoryBridge skipped: #{e.message}")
             { createdCount: 0, dedupedCount: 0 }
           end
+          linked_feeds = begin
+            purls = device.purls_list
+            Bulletins::GoldSnapshotLoader.load_gold_feeds.select do |feed|
+              purls.any? { |p| feed.matches_purl?(p) }
+            end.map do |feed|
+              { slug: feed.slug, proName: feed.pro_name, stnName: feed.stn_name }
+            end
+          rescue StandardError
+            []
+          end
           render json: {
             status: "created",
             device: device.to_gold_hash,
             site: serialize_site(site),
+            linkedFeeds: linked_feeds,
             advisoriesSync: advisories_sync
           }, status: :created
         else

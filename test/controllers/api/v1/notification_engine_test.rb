@@ -215,6 +215,8 @@ module Api
         assert_response :created
         body = JSON.parse(response.body)
         assert body.key?("advisoriesSync")
+        assert_kind_of Array, body["linkedFeeds"]
+        assert body["linkedFeeds"].any?, "Expected UDM-Pro to return at least 1 auto-linked feed"
 
         get "/api/v1/notifications/feed", headers: @headers
         assert_response :success
