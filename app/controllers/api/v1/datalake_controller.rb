@@ -34,6 +34,7 @@ module Api
 
         fleet_eval = evaluate_fleet_against_gold_bulletins
         dispatch_summary = Notifications::FleetBulletinDispatcher.dispatch_for_all_sites!
+        advisory_bridge = Notifications::GoldAdvisoryBridge.sync_all_sites!
 
         sync_record = {
           "sourcePipeline" => source_pipeline,
@@ -43,6 +44,7 @@ module Api
           "refinedPlaybookIds" => refined_playbook_ids,
           "fleetEvaluation" => fleet_eval,
           "notificationsQueued" => dispatch_summary[:notifications_queued],
+          "advisoriesSynced" => advisory_bridge,
           "syncedAt" => synced_at
         }
         self.class.last_sync_metadata = sync_record

@@ -57,6 +57,21 @@ class SiteNotification < ApplicationRecord
     surfaces.include?(surface.to_s)
   end
 
+  # Canonical domain kind:
+  # - "rhythm":   proactive, Tuesday-authored cadence/habit/onboarding triggers
+  # - "advisory": reactive, Datalake-ingested vendor/CVE/KEV/recall/EOL notices
+  # - "broadcast": manual operational notices
+  def kind
+    case trigger_type
+    when "maintenance_schedule", "onboarding_nudge"
+      "rhythm"
+    when "gold_advisory", "device_lifecycle"
+      "advisory"
+    else
+      "broadcast"
+    end
+  end
+
   # Shared lifecycle state machine.
   # Swiping an OS push (`push_seen`) does NOT dismiss the in-app Bulletin or Reminder.
   def transition!(action, snooze_minutes: nil)
@@ -89,6 +104,7 @@ class SiteNotification < ApplicationRecord
       monitoredDeviceId: monitored_device&.external_uuid || monitored_device_id&.to_s,
       monitoredDeviceLabel: monitored_device&.short_label || monitored_device&.name,
       ruleId: rule_id,
+      kind: kind,
       triggerType: trigger_type,
       dedupKey: dedup_key,
       surfaces: surfaces,

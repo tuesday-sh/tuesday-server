@@ -28,6 +28,10 @@ module Notifications
               deduped_count += 1
             end
           end
+
+          bridge_res = Notifications::GoldAdvisoryBridge.sync_for_site!(site)
+          created_count += bridge_res[:createdCount]
+          deduped_count += bridge_res[:dedupedCount]
         end
 
         push_summary = Notifications::PushDispatcher.dispatch_pending!

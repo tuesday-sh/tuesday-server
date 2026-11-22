@@ -182,6 +182,22 @@ module Api
         assert Notifications::Engine.patch_tuesday_window?(pt_second_tue)
         refute Notifications::Engine.patch_tuesday_window?(pt_first_tue)
       end
+
+      test "distinguishes canonical kind (rhythm vs advisory) on SiteNotification" do
+        post "/api/v1/notifications/test_rule",
+             params: { rule_id: "gold_critical_cve", force: true },
+             headers: @headers,
+             as: :json
+        assert_response :success
+        assert_equal "advisory", JSON.parse(response.body).dig("notification", "kind")
+
+        post "/api/v1/notifications/test_rule",
+             params: { rule_id: "rhythm_patch_tuesday", force: true },
+             headers: @headers,
+             as: :json
+        assert_response :success
+        assert_equal "rhythm", JSON.parse(response.body).dig("notification", "kind")
+      end
     end
   end
 end
