@@ -252,6 +252,31 @@ module Api
         assert_equal 1, body["otherSitesSummary"].first["criticalCount"]
         assert_equal "Parents House", body["notifications"].first["alsoAffectedSites"].first["name"]
       end
+
+      test "catalog relinker upgrades generic-PURL device and emits quiet coverage_unlocked bulletin" do
+        site = NetworkSite.create!(owner_key: "relink-owner", name: "Relink Lab", slug: "relink-lab")
+        dev = site.monitored_devices.create!(
+          external_uuid: "dev-relink-udm",
+          port_index: 1,
+          category_code: "C8",
+          short_label: "UDM-Pro",
+          name: "UniFi Dream Machine Pro",
+          vendor: "Ubiquiti",
+          model_number: "UDM-Pro",
+          version: "4.0.21",
+          purls: '["pkg:generic/enrolled/udm-pro"]'
+        )
+
+        res = Notifications::CatalogRelinker.relink_site!(site)
+        assert_equal 1, res[:relinkedCount]
+        refute dev.reload.purls_list.first.start_with?("pkg:generic/enrolled/")
+
+        unlocked = SiteNotification.find_by(network_site_id: site.id, rule_id: "device_coverage_unlocked")
+        assert_not_nil unlocked
+        assert_equal %w[bulletin], unlocked.surfaces
+        assert_equal "none", unlocked.push_status
+        assert_includes unlocked.title, "UDM-Pro"
+      end
     end
   end
 end

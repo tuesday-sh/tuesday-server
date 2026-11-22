@@ -33,6 +33,7 @@ module Api
         synced_at = Time.now.utc.iso8601
 
         fleet_eval = evaluate_fleet_against_gold_bulletins
+        relink_summary = Notifications::CatalogRelinker.relink_all_sites!
         dispatch_summary = Notifications::FleetBulletinDispatcher.dispatch_for_all_sites!
         advisory_bridge = Notifications::GoldAdvisoryBridge.sync_all_sites!
 
@@ -43,6 +44,7 @@ module Api
           "needsRefinementCount" => params[:needs_refinement_count]&.to_i,
           "refinedPlaybookIds" => refined_playbook_ids,
           "fleetEvaluation" => fleet_eval,
+          "catalogRelinked" => relink_summary,
           "notificationsQueued" => dispatch_summary[:notifications_queued],
           "advisoriesSynced" => advisory_bridge,
           "syncedAt" => synced_at

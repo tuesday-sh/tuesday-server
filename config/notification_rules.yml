@@ -146,6 +146,23 @@ rules:
       site_name: "Skyway Lab"
       device_count: "7"
 
+  - id: device_coverage_unlocked
+    name: "New Advisory Coverage Unlocked"
+    trigger_type: device_lifecycle
+    enabled: true
+    surfaces:
+      - bulletin
+    priority: low
+    cooldown_hours: 720
+    ttl_hours: 336
+    title_template: "Advisory coverage unlocked for {{device_label}}"
+    body_template: "We added {{device_label}} to our global catalog and linked it to vendor & security feeds automatically—no re-scan needed."
+    cta_label: "View Device"
+    deep_link_template: "tuesday://devices/{{device_id}}"
+    sample_context:
+      device_label: "UniFi Dream Machine Pro"
+      device_id: "dev-relinked-01"
+
   - id: admin_broadcast
     name: "Admin Broadcast"
     trigger_type: admin_broadcast

@@ -19,3 +19,11 @@ namespace :notifications do
     puts "[notifications:dispatch_push] #{result.to_json}"
   end
 end
+
+namespace :catalog do
+  desc "Relink existing generic-PURL MonitoredDevices against updated Gold Catalog and unlock coverage bulletins"
+  task relink: :environment do
+    result = Notifications::CatalogRelinker.relink_all_sites!
+    puts "[catalog:relink] #{result.to_json}"
+  end
+end
