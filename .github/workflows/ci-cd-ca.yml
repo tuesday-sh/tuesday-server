@@ -140,3 +140,7 @@ jobs:
           gcloud run jobs update tuesday-notifications-sweep \
             --image="$IMAGE_URI" \
             --region=us-west1 || true
+          gcloud run jobs execute tuesday-notifications-sweep \
+            --region=us-west1 \
+            --update-env-vars="NOTIFICATION_TRIGGER_SOURCE=deploy_migrate" \
+            --args="" || true
