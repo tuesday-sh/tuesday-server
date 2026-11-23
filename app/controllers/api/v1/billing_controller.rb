@@ -36,7 +36,7 @@ module Api
           activeSubscriptionSku: active_sub&.product_id,
           subscriptionState: active_sub&.subscription_state,
           expiresAt: active_sub&.expires_at&.utc&.iso8601,
-          maxPorts: NetworkSite::MAX_PORTS_M1,
+          maxPorts: site.max_allowed_ports,
           siteSlug: site.slug,
           checkedAt: Time.now.utc.iso8601
         }
@@ -171,7 +171,7 @@ module Api
           subscriptionState: result.subscription_state,
           verificationSource: result.verification_source,
           expiresAt: result.expires_at&.utc&.iso8601,
-          maxPorts: NetworkSite::MAX_PORTS_M1,
+          maxPorts: site.max_allowed_ports,
           siteSlug: site.slug,
           verifiedAt: Time.now.utc.iso8601
         }
@@ -206,7 +206,7 @@ module Api
           platform: platform,
           productId: product_id,
           entitlementTier: entitlement,
-          maxPorts: NetworkSite::MAX_PORTS_M1,
+          maxPorts: site.max_allowed_ports,
           siteSlug: site.slug,
           verifiedAt: Time.now.utc.iso8601
         }

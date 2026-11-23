@@ -7,6 +7,7 @@ class NetworkSite < ApplicationRecord
 
   VALID_SITE_TIERS = %w[day_zero pea garden forest].freeze
   VALID_ENTITLEMENTS = %w[free pro_tier_1 fleet].freeze
+  FREE_MAX_PORTS = 15
   MAX_PORTS_M1 = 128
 
   validates :owner_key, presence: true
@@ -14,6 +15,18 @@ class NetworkSite < ApplicationRecord
   validates :slug, presence: true, uniqueness: { scope: :owner_key }
   validates :site_tier, inclusion: { in: VALID_SITE_TIERS }
   validates :entitlement_tier, inclusion: { in: VALID_ENTITLEMENTS }
+
+  def pro_tier_entitled?
+    %w[pro_tier_1 multisite_tier_1 fleet].include?(entitlement_tier.to_s.strip.downcase)
+  end
+
+  def max_allowed_ports
+    pro_tier_entitled? ? MAX_PORTS_M1 : FREE_MAX_PORTS
+  end
+
+  def device_capacity_reached?
+    monitored_devices.count >= max_allowed_ports
+  end
 
   def muted_feed_slugs_list
     JSON.parse(muted_feed_slugs.presence || '["lg-esphome-iot"]')
@@ -27,7 +40,7 @@ class NetworkSite < ApplicationRecord
 
   def next_available_port_index
     used = monitored_devices.pluck(:port_index).to_set
-    (1..MAX_PORTS_M1).find { |idx| !used.include?(idx) }
+    (1..max_allowed_ports).find { |idx| !used.include?(idx) }
   end
 
   def recalculate_tier!

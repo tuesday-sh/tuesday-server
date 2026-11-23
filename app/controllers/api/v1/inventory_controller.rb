@@ -34,14 +34,26 @@ module Api
       end
 
       # POST /api/v1/inventory
-      # Enrolls a new MonitoredDevice into the caller's NetworkSite (128-port M1 limit).
+      # Enrolls a new MonitoredDevice into the caller's NetworkSite (15 free / 128 Pro Tier 1).
       def create
         site = current_network_site(auto_create: true)
+        max_ports = site.max_allowed_ports
         next_port = params[:port_index].present? ? params[:port_index].to_i : site.next_available_port_index
 
-        if next_port.nil? || next_port > NetworkSite::MAX_PORTS_M1
+        if site.device_capacity_reached? || next_port.nil? || next_port > max_ports
+          if !site.pro_tier_entitled?
+            return render json: {
+              error: "Free tier includes up to #{NetworkSite::FREE_MAX_PORTS} devices. Upgrade to Pro Tier 1 to unlock up to #{NetworkSite::MAX_PORTS_M1} devices per site.",
+              code: "free_device_limit_reached",
+              max_ports: max_ports,
+              upgrade_required: true
+            }, status: :payment_required
+          end
+
           return render json: {
-            error: "Site port capacity reached (maximum #{NetworkSite::MAX_PORTS_M1} nodes in M1)"
+            error: "Site port capacity reached (maximum #{max_ports} nodes in M1)",
+            code: "site_capacity_reached",
+            max_ports: max_ports
           }, status: :unprocessable_entity
         end
 
@@ -333,7 +345,7 @@ module Api
           entitlement_tier: site.entitlement_tier,
           muted_feed_slugs: site.muted_feed_slugs_list,
           device_count: site.monitored_devices.count,
-          max_ports: NetworkSite::MAX_PORTS_M1
+          max_ports: site.max_allowed_ports
         }
       end
     end

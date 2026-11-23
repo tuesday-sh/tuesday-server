@@ -235,6 +235,64 @@ module Api
           Billing::GooglePlayVerifier.define_singleton_method(:verify_subscription_token, orig)
         end
       end
+
+      test "POST /api/v1/inventory enforces 15-device free tier cap and unlocks up to 128 after Pro Tier 1 upgrade" do
+        cap_headers = {
+          "X-Tuesday-Device-ID" => "test-device-free-cap-001",
+          "X-Tuesday-Client-Platform" => "ios"
+        }
+
+        15.times do |i|
+          post "/api/v1/inventory",
+               params: {
+                 vendor: "Ubiquiti",
+                 model_number: "USW-Lite-#{i + 1}",
+                 name: "Switch #{i + 1}",
+                 category_code: "C2"
+               },
+               headers: cap_headers
+          assert_response :created
+        end
+
+        # 16th device on free tier must be rejected with 402 Payment Required
+        post "/api/v1/inventory",
+             params: {
+               vendor: "Ubiquiti",
+               model_number: "USW-Lite-16",
+               name: "Switch 16",
+               category_code: "C2"
+             },
+             headers: cap_headers
+        assert_response :payment_required
+        blocked = JSON.parse(response.body)
+        assert_equal "free_device_limit_reached", blocked["code"]
+        assert_equal 15, blocked["max_ports"]
+        assert_equal true, blocked["upgrade_required"]
+
+        # Upgrade site to Pro Tier 1 -> 16th device now succeeds and max_ports becomes 128
+        post "/api/v1/billing/verify",
+             params: {
+               platform: "ios",
+               product_id: "sh.tuesday.pro.tier1.annual",
+               transaction_jws: "eyJhbGciOiJFUzI1NiJ9.cap_upgrade_token"
+             },
+             headers: cap_headers
+        assert_response :success
+        assert_equal 128, JSON.parse(response.body)["maxPorts"]
+
+        post "/api/v1/inventory",
+             params: {
+               vendor: "Ubiquiti",
+               model_number: "USW-Lite-16",
+               name: "Switch 16",
+               category_code: "C2"
+             },
+             headers: cap_headers
+        assert_response :created
+        created = JSON.parse(response.body)
+        assert_equal 16, created.dig("device", "port_index")
+        assert_equal 128, created.dig("site", "max_ports")
+      end
     end
   end
 end

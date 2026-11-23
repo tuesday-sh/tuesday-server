@@ -201,8 +201,10 @@ module Api
         existing = site.monitored_devices.find_by(vendor: confirmed_vendor, model_number: confirmed_model)
         return existing if existing
 
+        return nil if site.device_capacity_reached?
+
         next_port = params[:port_index].present? ? params[:port_index].to_i : site.next_available_port_index
-        return nil if next_port.nil? || next_port > NetworkSite::MAX_PORTS_M1
+        return nil if next_port.nil? || next_port > site.max_allowed_ports
 
         ver = params[:version].presence || "1.0.0"
         resolved_gold = Discovery::HardwareVisionService.resolve_gold_device_identity(
