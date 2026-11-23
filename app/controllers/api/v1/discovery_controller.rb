@@ -40,6 +40,24 @@ module Api
           }, status: :payload_too_large
         end
 
+        site = current_network_site(auto_create: false)
+        if raw_images.any? && !site&.pro_tier_entitled? && DiscoveryTurn.table_exists? && DiscoverySession.table_exists?
+          used_photo_scans = DiscoveryTurn
+            .joins(:discovery_session)
+            .where(discovery_sessions: { device_id: @device_id })
+            .where("discovery_turns.image_count > 0")
+            .count
+          if used_photo_scans >= NetworkSite::FREE_AI_PHOTO_SCAN_LIMIT
+            return render json: {
+              error: "Free tier includes #{NetworkSite::FREE_AI_PHOTO_SCAN_LIMIT} AI photo identifications. Upgrade to Pro Tier 1 for unlimited AI photo scans.",
+              code: "free_ai_scan_limit_reached",
+              limit: NetworkSite::FREE_AI_PHOTO_SCAN_LIMIT,
+              used: used_photo_scans,
+              upgrade_required: true
+            }, status: :payment_required
+          end
+        end
+
         previous_guess = if params[:previous_guess].respond_to?(:to_unsafe_h)
                            params[:previous_guess].to_unsafe_h
                          elsif params[:previous_guess].is_a?(Hash)

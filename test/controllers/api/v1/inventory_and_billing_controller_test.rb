@@ -293,6 +293,75 @@ module Api
         assert_equal 16, created.dig("device", "port_index")
         assert_equal 128, created.dig("site", "max_ports")
       end
+
+      test "POST /api/v1/discovery/analyze enforces 15 free AI photo scans while keeping text-only free and Pro unlimited" do
+        scan_device_id = "test-device-ai-quota-001"
+        scan_headers = {
+          "X-Tuesday-Device-ID" => scan_device_id,
+          "X-Tuesday-Client-Platform" => "ios"
+        }
+
+        session = DiscoverySession.create!(
+          session_id: "sess-quota-seed",
+          device_id: scan_device_id,
+          client_platform: "ios",
+          initial_mode: "photo_wizard"
+        )
+        15.times do |i|
+          DiscoveryTurn.create!(
+            discovery_session: session,
+            session_id: session.session_id,
+            turn_index: i + 1,
+            image_count: 1,
+            routing_tier: "tier2_gemini_failover",
+            provider: "gemini",
+            model: "gemini-2.5-flash"
+          )
+        end
+
+        # 16th AI photo scan on Free tier returns 402 Payment Required
+        post "/api/v1/discovery/analyze",
+             params: {
+               session_id: "sess-quota-16",
+               images_base64: ["dGVzdF9pbWFnZQ=="],
+               user_clue_notes: ["Ubiquiti"]
+             },
+             headers: scan_headers
+        assert_response :payment_required
+        blocked = JSON.parse(response.body)
+        assert_equal "free_ai_scan_limit_reached", blocked["code"]
+        assert_equal 15, blocked["limit"]
+        assert_equal 15, blocked["used"]
+        assert_equal true, blocked["upgrade_required"]
+
+        # Text/clue-only discovery (no images) remains 100% Free even after 10 photo scans
+        post "/api/v1/discovery/analyze",
+             params: {
+               session_id: "sess-quota-text",
+               user_clue_notes: ["Ubiquiti", "UDM-Pro"]
+             },
+             headers: scan_headers
+        assert_response :success
+
+        # Upgrade to Pro Tier 1 -> photo scan succeeds
+        post "/api/v1/billing/verify",
+             params: {
+               platform: "ios",
+               product_id: "sh.tuesday.pro.tier1.annual",
+               transaction_jws: "eyJhbGciOiJFUzI1NiJ9.ai_quota_pro_token"
+             },
+             headers: scan_headers
+        assert_response :success
+
+        post "/api/v1/discovery/analyze",
+             params: {
+               session_id: "sess-quota-pro",
+               images_base64: ["dGVzdF9pbWFnZQ=="],
+               user_clue_notes: ["Ubiquiti", "UDM-Pro"]
+             },
+             headers: scan_headers
+        assert_response :success
+      end
     end
   end
 end

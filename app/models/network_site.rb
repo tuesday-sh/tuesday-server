@@ -9,6 +9,7 @@ class NetworkSite < ApplicationRecord
   VALID_ENTITLEMENTS = %w[free pro_tier_1 fleet].freeze
   FREE_MAX_PORTS = 15
   MAX_PORTS_M1 = 128
+  FREE_AI_PHOTO_SCAN_LIMIT = 15
 
   validates :owner_key, presence: true
   validates :name, presence: true
