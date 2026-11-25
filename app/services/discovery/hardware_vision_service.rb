@@ -426,6 +426,19 @@ module Discovery
             end
           end
 
+          # Step 1b: Guard against unmatchable opaque-identifier-only lookups (e.g. unknown retail barcode with 0 photos)
+          # Never fall through to Vision LLM or hardcoded router heuristic when there are no photos and no descriptive clues.
+          if result.nil? && ephemeral_frames.empty? && provider_override.to_s.downcase != "heuristic" && identifier_only_without_descriptive_clues?(normalized_clues)
+            trace.call(
+              "CATALOG_SHORT_CIRCUIT",
+              "NO_MATCH (0 photos and opaque identifier-only clues; returning empty candidates with 0 LLM turns)"
+            )
+            result = no_match_identifier_result(clues: normalized_clues)
+            short_circuited = true
+            provider_used = "CatalogCache"
+            model_used = "no-match-identifier-only"
+          end
+
           # Step 2: Single-Hop Vision LLM Router (Primary -> Hard-Error-Only Failover)
           # Never chain a second LLM on low confidence; return `nextNarrowingQuestion` to the user immediately.
           unless result
@@ -437,7 +450,7 @@ module Discovery
 
             if primary_provider == "heuristic"
               trace.call("ROUTER", "Using deterministic Heuristic mode (provider_override=heuristic)")
-              result = heuristic_infer(turn_index: turn_index, previous_guess: previous_guess, clues: normalized_clues)
+              result = heuristic_infer(turn_index: turn_index, previous_guess: previous_guess, clues: normalized_clues, image_count: ephemeral_frames.size)
               provider_used = "Heuristic"
               model_used = "heuristic-fallback"
             elsif primary_provider == "gemini"
@@ -476,7 +489,7 @@ module Discovery
                 rescue StandardError => elastix_err
                   Rails.logger.warn("[Discovery::HardwareVisionService] Elastix failover failed (#{elastix_err.message}); using deterministic heuristic")
                   trace.call("LLM_ERROR", "Elastix failover failed: #{elastix_err.message} -> falling back to Heuristic")
-                  result = heuristic_infer(turn_index: turn_index, previous_guess: previous_guess, clues: normalized_clues)
+                  result = heuristic_infer(turn_index: turn_index, previous_guess: previous_guess, clues: normalized_clues, image_count: ephemeral_frames.size)
                   provider_used = "Heuristic"
                   model_used = "heuristic-fallback"
                 end
@@ -517,7 +530,7 @@ module Discovery
                 rescue StandardError => gemini_err
                   Rails.logger.warn("[Discovery::HardwareVisionService] Gemini failover failed (#{gemini_err.message}); using deterministic heuristic")
                   trace.call("LLM_ERROR", "Gemini failover failed: #{gemini_err.message} -> falling back to Heuristic")
-                  result = heuristic_infer(turn_index: turn_index, previous_guess: previous_guess, clues: normalized_clues)
+                  result = heuristic_infer(turn_index: turn_index, previous_guess: previous_guess, clues: normalized_clues, image_count: ephemeral_frames.size)
                   provider_used = "Heuristic"
                   model_used = "heuristic-fallback"
                 end
@@ -1703,7 +1716,42 @@ module Discovery
         }
       end
 
-      def heuristic_infer(turn_index:, previous_guess:, clues:)
+      OPAQUE_IDENTIFIER_CLUE_KEYS = %w[barcode upc ean qr serialNumber macAddress fccId].freeze
+      DESCRIPTIVE_CLUE_KEYS = %w[modelNumber manufacturer brand deviceType productName notes].freeze
+
+      def identifier_only_without_descriptive_clues?(clues)
+        obj = (clues[:object] || {}).transform_keys(&:to_s)
+        non_empty_keys = obj.select { |_k, v| v.to_s.strip.present? }.keys
+        return false if non_empty_keys.empty?
+
+        has_opaque = (non_empty_keys & OPAQUE_IDENTIFIER_CLUE_KEYS).any?
+        has_descriptive = (non_empty_keys & DESCRIPTIVE_CLUE_KEYS).any?
+        has_opaque && !has_descriptive
+      end
+
+      def no_match_identifier_result(clues:)
+        {
+          "visualSummary" => "No matching hardware found for the scanned barcode or identifier.",
+          "isNetworkedDevice" => true,
+          "outOfScopeReason" => nil,
+          "multipleDevicesDetected" => false,
+          "multiDeviceWarning" => nil,
+          "nextNarrowingQuestion" => "We couldn't match that barcode in our hardware catalog. Try snapping a photo of the device label or entering the brand and model below.",
+          "recommendedClueTypes" => DEFAULT_CLUE_TYPES,
+          "extractedIdentifiersObject" => clues[:object],
+          "candidates" => [],
+          "vendor" => "Unknown Vendor",
+          "model" => "Unidentified Hardware",
+          "confidence" => 0.0,
+          "reasoning" => "No hardware catalog entry matched the provided barcode or identifier."
+        }
+      end
+
+      def heuristic_infer(turn_index:, previous_guess:, clues:, image_count: 1)
+        if image_count.to_i <= 0 && identifier_only_without_descriptive_clues?(clues)
+          return no_match_identifier_result(clues: clues)
+        end
+
         joined = clues[:flat_list].join(" ").downcase
         has_clue = clues[:flat_list].any? || turn_index.to_i > 1
         top_conf = has_clue ? 94 : 68

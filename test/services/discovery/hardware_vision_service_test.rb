@@ -550,4 +550,17 @@ class HardwareVisionServiceTest < Minitest::Test
       svc_singleton.define_method(:call_elastix_chat_completions, original_call_elastix)
     end
   end
+
+  def test_unmatchable_barcode_with_no_photos_returns_empty_candidates
+    res = Discovery::HardwareVisionService.analyze(
+      session_id: "test-unmatchable-barcode-001",
+      provider_override: "auto",
+      extracted_identifiers: ["Barcode: 049000028904"],
+      debug: false
+    )
+
+    assert_equal [], res["candidates"], "Unmatchable barcode with 0 photos must return 0 candidates (no hardcoded UCG-Ultra/GL-MT3000)"
+    assert_equal "no-match-identifier-only", res["modelUsed"]
+    assert_equal 0.0, res["confidence"]
+  end
 end

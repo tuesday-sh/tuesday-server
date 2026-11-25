@@ -10,7 +10,8 @@ RUN apk update && apk add --no-cache \
     ruby-3.3-dev \
     postgresql-dev \
     sqlite-dev \
-    yaml-dev \
+    "yaml<0.2.6" \
+    "yaml-dev<0.2.6" \
     zlib-dev \
     libffi-dev \
     openssl-dev \
