@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "digest"
 require "json"
 require "net/http"
 require "uri"
@@ -27,7 +28,17 @@ module Telemetry
         cid = device_id.to_s.strip.downcase
         return true if cid.blank?
 
-        IGNORED_DEVICE_PREFIXES.any? { |prefix| cid.start_with?(prefix) }
+        return true if IGNORED_DEVICE_PREFIXES.any? { |prefix| cid.start_with?(prefix) }
+
+        extra_ignored = ENV.fetch("DISCORD_IGNORED_DEVICE_IDS", "")
+                           .split(",")
+                           .map { |entry| entry.strip.downcase }
+                           .reject(&:empty?)
+        extra_ignored.any? { |entry| cid == entry || cid.start_with?(entry) }
+      end
+
+      def device_hash(device_id)
+        Digest::SHA256.hexdigest(device_id.to_s)[0, 10]
       end
 
       def build_activation_payload(event)
@@ -41,7 +52,7 @@ module Telemetry
                 { name: "Platform", value: event.client_platform.to_s, inline: true },
                 { name: "Flavor", value: event.app_flavor.to_s, inline: true },
                 { name: "First Event", value: event.event_name.to_s, inline: true },
-                { name: "Device ID", value: "`#{event.device_id}`", inline: false }
+                { name: "Device Hash", value: "`#{device_hash(event.device_id)}`", inline: false }
               ],
               timestamp: (event.created_at || Time.current).utc.iso8601
             }

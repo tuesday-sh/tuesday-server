@@ -150,10 +150,21 @@ module Api
         assert_equal 3, jwt.split(".").size
       end
 
-      test "discord notifier formats activation payload and ignores synthetic device IDs" do
+      test "discord notifier formats activation payload, hashes device_id, and ignores synthetic or configured device IDs" do
         assert Telemetry::DiscordNotifier.ignored_device?("test-workbench-01")
+        assert Telemetry::DiscordNotifier.ignored_device?("test-android-1234abcd")
         assert Telemetry::DiscordNotifier.ignored_device?("anonymous")
         refute Telemetry::DiscordNotifier.ignored_device?("pixel9-real-user-uuid")
+
+        previous_ignored = ENV["DISCORD_IGNORED_DEVICE_IDS"]
+        begin
+          ENV["DISCORD_IGNORED_DEVICE_IDS"] = "pixel9-real-user-uuid, ios-qa-prefix-"
+          assert Telemetry::DiscordNotifier.ignored_device?("pixel9-real-user-uuid")
+          assert Telemetry::DiscordNotifier.ignored_device?("ios-qa-prefix-999")
+          refute Telemetry::DiscordNotifier.ignored_device?("android-9999ffff")
+        ensure
+          ENV["DISCORD_IGNORED_DEVICE_IDS"] = previous_ignored
+        end
 
         ev = ProductTelemetryEvent.new(
           event_name: "app.activated",
@@ -165,6 +176,10 @@ module Api
         payload = Telemetry::DiscordNotifier.build_activation_payload(ev)
         assert_equal "Tuesday Activation Bot", payload[:username]
         assert_equal "New User Activation", payload[:embeds].first[:title]
+        device_field = payload[:embeds].first[:fields].find { |f| f[:name] == "Device Hash" }
+        assert_not_nil device_field
+        assert_equal "`#{Telemetry::DiscordNotifier.device_hash("pixel9-real-user-uuid")}`", device_field[:value]
+        refute_includes payload.to_json, "pixel9-real-user-uuid"
         assert_equal :unconfigured, Telemetry::DiscordNotifier.notify_first_activation!(ev)
       end
 
